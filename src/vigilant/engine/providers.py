@@ -70,6 +70,32 @@ _PROVIDER_ALIASES = {
 }
 
 
+# Recommended model string per provider, used for auto-selection and hints.
+RECOMMENDED_MODELS = {
+    "anthropic": "claude-sonnet-4-6",
+    "openai": "openai/gpt-5.5",
+    "groq": "groq/llama-3.3-70b-versatile",
+    "gemini": "gemini/gemini-2.5-flash",
+    "nvidia_nim": "nvidia_nim/deepseek-ai/deepseek-v3.2-exp",
+    "openrouter": "openrouter/meta-llama/llama-3.3-70b-instruct",
+}
+# Preference order when auto-selecting a model from whatever key is present.
+_AUTO_ORDER = ("anthropic", "openai", "groq", "gemini", "nvidia_nim", "openrouter")
+
+
+def auto_select_model() -> str | None:
+    """Pick a model string from whichever provider key is present.
+
+    Returns the recommended `provider/model` for the first provider (in
+    preference order) whose key is set, or None if no provider key is found.
+    Anthropic wins when present (its bare model name is the built-in default).
+    """
+    for provider in _AUTO_ORDER:
+        if provider_api_key(provider):
+            return RECOMMENDED_MODELS[provider]
+    return None
+
+
 def resolve_provider(model: str) -> tuple[str, str]:
     """Split a `provider/model` string into (provider_key, model_name).
 

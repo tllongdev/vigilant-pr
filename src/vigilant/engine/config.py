@@ -139,3 +139,32 @@ def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def load_dotenv(path: str | Path = ".env") -> bool:
+    """Load KEY=VALUE pairs from a `.env` file into os.environ (stdlib only).
+
+    Real environment variables always win (a value already set is never
+    overwritten), so `.env` is a convenience default, not an override. Supports
+    `export KEY=value`, `#` comments, blank lines, and single/double-quoted
+    values. Returns True if a file was found and read.
+    """
+    p = Path(path)
+    if not p.exists():
+        return False
+    for raw in p.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+    return True

@@ -7,7 +7,9 @@ knowledge-substrate reviewer.
 
 from __future__ import annotations
 
+import os
 import random
+import shutil
 import subprocess
 import sys
 import time
@@ -24,6 +26,36 @@ _GH_TRANSIENT_PATTERNS = (
     "TLS handshake",
     "i/o timeout",
 )
+
+
+def github_preflight() -> str | None:
+    """Check that GitHub access is usable, returning a friendly message if not.
+
+    Returns None when good to go, or an actionable error string when the `gh`
+    CLI is missing/unauthenticated and no GH_TOKEN is set. Cheap to call at
+    startup so a new user gets a clear reason instead of a raw exit-3 later.
+    """
+    has_token = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
+    gh_path = shutil.which("gh")
+    if gh_path is None:
+        if has_token:
+            return None  # `gh` reads GH_TOKEN from the environment; fine without login
+        return (
+            "GitHub CLI 'gh' not found and no GH_TOKEN set.\n"
+            "  Install gh: https://cli.github.com  then run: gh auth login\n"
+            "  or set GH_TOKEN to a token with Pull requests: read/write."
+        )
+    if has_token:
+        return None  # token present; trust it rather than probing keyring auth
+    result = subprocess.run(
+        ["gh", "auth", "status"], capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        return (
+            "GitHub CLI is installed but not authenticated.\n"
+            "  Run: gh auth login   (or set GH_TOKEN with Pull requests: read/write)."
+        )
+    return None
 
 
 def run(

@@ -6,11 +6,18 @@ review code path with no behavioral divergence between surfaces.
 
 from __future__ import annotations
 
-from .config import DEFAULT_MODEL, MODEL_PROFILES, OPUS_MODEL, SONNET_MODEL, Config
+from .config import DEFAULT_MODEL, MODEL_PROFILES, OPUS_MODEL, SONNET_MODEL, Config, load_dotenv
 from .errors import ReviewFailedError
 from .identity import build_signature, resolve_handle
-from .providers import PROVIDERS, list_models, provider_api_key, resolve_provider
+from .providers import (
+    PROVIDERS,
+    auto_select_model,
+    list_models,
+    provider_api_key,
+    resolve_provider,
+)
 from .review import run_review, run_threads_only
+from .util import github_preflight
 from .watcher import run_watch
 
 __all__ = [
@@ -21,8 +28,11 @@ __all__ = [
     "PROVIDERS",
     "SONNET_MODEL",
     "ReviewFailedError",
+    "auto_select_model",
     "build_signature",
+    "github_preflight",
     "list_models",
+    "load_dotenv",
     "provider_api_key",
     "resolve_handle",
     "resolve_provider",

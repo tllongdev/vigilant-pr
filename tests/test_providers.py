@@ -58,6 +58,31 @@ def test_provider_needs_key() -> None:
     assert providers.provider_needs_key("mock") is False
 
 
+def _clear_all_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    for spec in providers.PROVIDERS.values():
+        key_env = spec.get("key_env")
+        if key_env:
+            monkeypatch.delenv(key_env, raising=False)
+
+
+def test_auto_select_model_prefers_anthropic(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_all_keys(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-x")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_x")
+    assert providers.auto_select_model() == providers.RECOMMENDED_MODELS["anthropic"]
+
+
+def test_auto_select_model_falls_back_to_present_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_all_keys(monkeypatch)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_x")
+    assert providers.auto_select_model() == providers.RECOMMENDED_MODELS["groq"]
+
+
+def test_auto_select_model_none_when_no_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_all_keys(monkeypatch)
+    assert providers.auto_select_model() is None
+
+
 def test_base_url_override_wins() -> None:
     cfg = Config(api_base="http://localhost:1234/v1")
     assert providers.base_url("ollama", cfg) == "http://localhost:1234/v1"

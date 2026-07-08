@@ -38,6 +38,24 @@ docs. Plus model-agnostic inference (Claude + free tiers + local models). See
 The core engine is dependency-free (standard library only) - model calls go over
 plain HTTP, no SDKs.
 
+Vigilant runs a quick preflight before any GitHub command and tells you exactly
+what to do if `gh` is missing or not logged in, so you are never left guessing.
+
+## Configuration (`.env`)
+
+You can put your keys in a `.env` file in the directory you run from instead of
+exporting them each time. Real environment variables always take precedence, so
+`.env` is just a convenience default. Copy the template and fill in what you use:
+
+```bash
+cp .env.example .env
+# then edit .env
+```
+
+If you set no model, Vigilant auto-selects one from whichever provider key it
+finds (Anthropic preferred), and prints which model it chose - so a free-tier
+user with only `GROQ_API_KEY` is never told to "set `ANTHROPIC_API_KEY`".
+
 ## Install
 
 ```bash

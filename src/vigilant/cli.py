@@ -16,6 +16,7 @@ model) via a `provider/model` string - see `vigilant models`.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from .engine import (
@@ -24,12 +25,19 @@ from .engine import (
     PROVIDERS,
     SONNET_MODEL,
     Config,
+    auto_select_model,
+    github_preflight,
     list_models,
+    load_dotenv,
     provider_api_key,
+    resolve_provider,
     run_review,
     run_threads_only,
     run_watch,
 )
+
+# Commands that touch GitHub and therefore need `gh`/GH_TOKEN available.
+_GITHUB_COMMANDS = {"review", "threads", "watch", "slack", "teams"}
 
 
 def _resolve_model(args: argparse.Namespace) -> str | None:
@@ -71,7 +79,31 @@ def _add_common_flags(sub: argparse.ArgumentParser) -> None:
     _add_model_flags(sub)
 
 
+def _effective_model(args: argparse.Namespace) -> str | None:
+    """Resolve the model to use, auto-selecting from available keys if needed.
+
+    Explicit flags and VIGILANT_MODEL always win. Otherwise, if there is no
+    Anthropic key but another provider key is present, auto-pick that provider
+    so a free-tier user isn't told to "set ANTHROPIC_API_KEY". Returns None to
+    defer to the built-in default (Anthropic Sonnet).
+    """
+    explicit = _resolve_model(args)
+    if explicit is not None or os.environ.get("VIGILANT_MODEL"):
+        return explicit
+    auto = auto_select_model()
+    if auto and resolve_provider(auto)[0] != "anthropic":
+        provider = resolve_provider(auto)[0]
+        sys.stderr.write(
+            f"No model set and no Anthropic key found; using {auto} "
+            f"({PROVIDERS[provider]['key_env']} detected). "
+            f"Override with --model or VIGILANT_MODEL.\n"
+        )
+        return auto
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
+    load_dotenv()  # convenience: load ./.env (real env vars still win)
     parser = argparse.ArgumentParser(
         prog="vigilant",
         description=(
@@ -122,7 +154,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "models":
         return run_models(Config.from_env())
-    model = _resolve_model(args)
+
+    if args.command in _GITHUB_COMMANDS:
+        gh_problem = github_preflight()
+        if gh_problem:
+            sys.stderr.write(gh_problem + "\n")
+            return 1
+
+    model = _effective_model(args)
     config = Config.from_env(
         model=model,
         dry_run=getattr(args, "dry_run", False),
