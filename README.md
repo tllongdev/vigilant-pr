@@ -1,7 +1,13 @@
-# Vigilant PR
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/vigilant-pr-logo-dark.svg" />
+    <img src="assets/vigilant-pr-logo.svg" alt="Vigilant PR" width="440" />
+  </picture>
+</p>
 
-A portable, workflow-agnostic AI pull-request reviewer that posts review comments
-**on behalf of you** - your GitHub identity, not a generic bot.
+<p align="center"><em>A portable, workflow-agnostic AI pull-request reviewer that posts review comments <b>on behalf of you</b> - your GitHub identity, not a generic bot.</em></p>
+
+---
 
 PR reviews get requested in Slack/Teams by @-mentioning a colleague, or by tagging
 their GitHub username as a reviewer. Vigilant PR lets the tagged reviewer delegate
@@ -171,6 +177,20 @@ comment carries a signature block making clear it is an AI-assisted first pass
 run by you, and naming the model that ran. Vigilant PR never uses
 `REQUEST_CHANGES` or `APPROVE` - severity is conveyed by markers, and humans
 still own approval.
+
+## Branding
+
+Brand assets live in [`assets/`](assets):
+
+| Asset | Use |
+|---|---|
+| `vigilant-pr-mark.svg` / `.png` | Icon only - GitHub/app avatar, favicon, social |
+| `vigilant-pr-logo.svg` | Horizontal lockup for light backgrounds |
+| `vigilant-pr-logo-dark.svg` | Horizontal lockup for dark backgrounds |
+
+The mark is a watchful eye whose iris is a scanner aperture - vigilance, not
+approval (Vigilant PR never auto-approves). Palette: `#4da3ff` (blue) to
+`#a98bff` (violet) on `#0b0f1a` ink.
 
 ## License
 

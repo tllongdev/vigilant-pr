@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Vigilant PR">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4da3ff"/>
+      <stop offset="1" stop-color="#a98bff"/>
+    </linearGradient>
+    <radialGradient id="iris" cx="0.42" cy="0.4" r="0.75">
+      <stop offset="0" stop-color="#1c3763"/>
+      <stop offset="1" stop-color="#0c1830"/>
+    </radialGradient>
+    <clipPath id="eyeClip">
+      <path d="M12 64 Q64 30 116 64 Q64 98 12 64 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- badge tile -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#tile)"/>
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#0b0f1a" opacity="0.06"/>
+
+  <!-- eye white -->
+  <path d="M12 64 Q64 30 116 64 Q64 98 12 64 Z" fill="#f3f8ff"/>
+
+  <!-- iris -->
+  <circle cx="64" cy="64" r="23" fill="url(#iris)"/>
+  <!-- scanner aperture ring -->
+  <circle cx="64" cy="64" r="23" fill="none" stroke="#4da3ff" stroke-width="3.5"/>
+  <circle cx="64" cy="64" r="15.5" fill="none" stroke="#7cc0ff" stroke-width="1.6" opacity="0.7"/>
+  <!-- pupil -->
+  <circle cx="64" cy="64" r="8" fill="#05080f"/>
+  <!-- specular highlight -->
+  <circle cx="58" cy="58" r="3.1" fill="#eaf2ff" opacity="0.92"/>
+
+  <!-- scan sweep across the eye, clipped to the eye shape -->
+  <g clip-path="url(#eyeClip)">
+    <line x1="24" y1="82" x2="104" y2="46" stroke="#4da3ff" stroke-width="2" opacity="0.35"/>
+  </g>
+
+  <!-- eyelid depth on the upper arc -->
+  <path d="M12 64 Q64 30 116 64" fill="none" stroke="#0c1830" stroke-width="2.4" opacity="0.35" stroke-linecap="round"/>
+</svg>

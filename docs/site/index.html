@@ -41,9 +41,8 @@
   }
   .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: .2px; }
   .brand .eye {
-    width: 30px; height: 30px; border-radius: 50%;
-    background: radial-gradient(circle at 50% 50%, var(--accent) 0 26%, #0b0f1a 27% 44%, var(--accent) 45% 52%, transparent 53%);
-    box-shadow: 0 0 0 2px var(--line), 0 0 22px var(--accent-soft);
+    width: 30px; height: 30px; border-radius: 8px; display: block;
+    box-shadow: 0 0 22px var(--accent-soft);
   }
   .brand small { color: var(--muted); font-weight: 500; }
   nav.top a { color: var(--muted); margin-left: 20px; font-size: 14px; }
@@ -116,7 +115,23 @@
 <div class="wrap">
   <header class="site">
     <div class="brand">
-      <span class="eye" aria-hidden="true"></span>
+      <svg class="eye" viewBox="0 0 128 128" aria-hidden="true">
+        <defs>
+          <linearGradient id="t" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#4da3ff"/><stop offset="1" stop-color="#a98bff"/>
+          </linearGradient>
+          <radialGradient id="i" cx="0.42" cy="0.4" r="0.75">
+            <stop offset="0" stop-color="#1c3763"/><stop offset="1" stop-color="#0c1830"/>
+          </radialGradient>
+        </defs>
+        <rect width="128" height="128" rx="28" fill="url(#t)"/>
+        <path d="M12 64 Q64 30 116 64 Q64 98 12 64 Z" fill="#f3f8ff"/>
+        <circle cx="64" cy="64" r="23" fill="url(#i)"/>
+        <circle cx="64" cy="64" r="23" fill="none" stroke="#4da3ff" stroke-width="3.5"/>
+        <circle cx="64" cy="64" r="15.5" fill="none" stroke="#7cc0ff" stroke-width="1.6" opacity="0.7"/>
+        <circle cx="64" cy="64" r="8" fill="#05080f"/>
+        <circle cx="58" cy="58" r="3.1" fill="#eaf2ff" opacity="0.92"/>
+      </svg>
       <span>Vigilant PR <small>by LongIntel</small></span>
     </div>
     <nav class="top">
