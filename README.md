@@ -184,9 +184,10 @@ Brand assets live in [`assets/`](assets):
 
 | Asset | Use |
 |---|---|
-| `vigilant-pr-mark.svg` / `.png` | Icon only - GitHub/app avatar, favicon, social |
+| `vigilant-pr-mark.svg` / `.png` | Icon only - GitHub/app avatar, favicon |
 | `vigilant-pr-logo.svg` | Horizontal lockup for light backgrounds |
 | `vigilant-pr-logo-dark.svg` | Horizontal lockup for dark backgrounds |
+| `vigilant-pr-social.svg` / `.png` | 1200x630 social / OpenGraph banner for link previews |
 
 The mark is a watchful eye whose iris is a scanner aperture - vigilance, not
 approval (Vigilant PR never auto-approves). Palette: `#4da3ff` (blue) to
