@@ -1,0 +1,12 @@
+{
+  "name": "Vigilant PR",
+  "short_name": "Vigilant PR",
+  "description": "A portable, workflow-agnostic AI PR reviewer that posts on behalf of you.",
+  "icons": [
+    { "src": "favicon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "favicon-512.png", "type": "image/png", "sizes": "512x512" }
+  ],
+  "theme_color": "#0b0f1a",
+  "background_color": "#0b0f1a",
+  "display": "standalone"
+}
