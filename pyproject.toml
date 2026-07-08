@@ -12,7 +12,11 @@ keywords = ["pull-request", "code-review", "ai", "github", "cli"]
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+# Chat triggers. Slack Socket Mode needs slack_bolt; the Teams webhook is
+# stdlib-only, so `slack` is the only third-party trigger dependency.
+slack = ["slack_bolt>=1.18"]
+chat = ["slack_bolt>=1.18"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "slack_bolt>=1.18"]
 
 [project.scripts]
 vigilant = "vigilant.cli:main"
@@ -39,3 +43,13 @@ ignore = ["E501"]
 python_version = "3.12"
 strict = true
 warn_unused_ignores = true
+
+# slack_bolt ships no type stubs; the Slack adapter is a thin optional
+# integration whose handlers are registered via slack_bolt's untyped decorators.
+[[tool.mypy.overrides]]
+module = "slack_bolt.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "vigilant.triggers.slack"
+disable_error_code = ["untyped-decorator"]

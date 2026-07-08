@@ -1,7 +1,7 @@
-# Vigilant PR - single image that serves both `review` (one-shot) and, later,
-# `watch` (daemon). Bundles Python 3.12 + the GitHub CLI so the only inputs a
-# user supplies at runtime are ANTHROPIC_API_KEY and a GitHub token (GH_TOKEN),
-# or a mounted `gh` config. No secrets are baked into the image.
+# Vigilant PR - single image that serves every subcommand: `review` (one-shot),
+# `watch` (daemon), `slack`, and `teams`. Bundles Python 3.12 + the GitHub CLI so
+# the only inputs a user supplies at runtime are ANTHROPIC_API_KEY and a GitHub
+# token (GH_TOKEN), or a mounted `gh` config. No secrets are baked into the image.
 FROM python:3.12-slim
 
 # GitHub CLI from the official apt repo.
@@ -20,7 +20,9 @@ RUN apt-get update \
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+# Include the Slack extra so the one image serves the `slack` subcommand too;
+# the engine itself stays stdlib-only.
+RUN pip install --no-cache-dir '.[slack]'
 
 # `gh` reads GH_TOKEN from the environment; no interactive login needed.
 ENTRYPOINT ["vigilant"]

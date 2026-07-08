@@ -16,8 +16,9 @@ Actions install.
 
 ## Status
 
-Milestones 001-003 complete: engine extraction, container + GHCR image, and the
-review-request watcher daemon. See `docs/` in the planning repo.
+Milestones 001-005 complete: engine extraction, container + GHCR image, the
+review-request watcher daemon, the Slack trigger, and the Teams trigger (beta) +
+docs. See `docs/` in the planning repo.
 
 ## Requirements
 
@@ -101,6 +102,67 @@ The watcher uses only your token. It needs:
   (post reviews, read diffs).
 - Repo read access sufficient for `gh search prs --review-requested=@me` to see
   the PRs you are tagged on.
+
+## Slack trigger
+
+`vigilant slack` runs a Slack listener that reviews a PR when you ask it to in
+chat. It uses **Socket Mode** (an outbound WebSocket), so like the watcher it
+needs no inbound ports. Install the Slack extra (`pipx install
+'vigilant-pr[slack]'`) or use the container image, which bundles it.
+
+Three ways to trigger a review:
+- Slash command: `/review https://github.com/owner/repo/pull/123` (add `--opus`
+  for the hard-PR tier).
+- @-mention the app in a message that contains a PR link.
+- React to any message containing a PR link with a trigger emoji (default
+  :eyes:; configurable via `VIGILANT_TRIGGER_EMOJIS`).
+
+Every review still posts on GitHub as **your** identity (the process's GitHub
+token). Because of that, restrict who may trigger it:
+
+```bash
+export SLACK_BOT_TOKEN="xoxb-..."          # bot token
+export SLACK_APP_TOKEN="xapp-..."          # app-level token (connections:write)
+export SLACK_ALLOWED_USERS="U012ABCDEF"    # Slack user IDs allowed to trigger
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GH_TOKEN="ghp_..."
+vigilant slack
+```
+
+If `SLACK_ALLOWED_USERS` is unset the listener starts but warns loudly - anyone
+in the workspace could otherwise post reviews under your GitHub identity.
+
+Slack app setup (once): create an app, enable **Socket Mode**, add bot scopes
+`chat:write`, `app_mentions:read`, `commands`, `reactions:read`,
+`channels:history`; add the `/review` slash command; subscribe to the
+`app_mention` and `reaction_added` events; install to your workspace.
+
+```bash
+docker run -d --name vigilant-slack --restart unless-stopped \
+  -e ANTHROPIC_API_KEY -e GH_TOKEN \
+  -e SLACK_BOT_TOKEN -e SLACK_APP_TOKEN -e SLACK_ALLOWED_USERS \
+  ghcr.io/tllongdev/vigilant-pr:latest slack
+```
+
+## Teams trigger (beta)
+
+`vigilant teams` serves a Microsoft Teams **Outgoing Webhook** endpoint. Teams
+has no Socket-Mode equivalent, so this surface needs an inbound HTTPS URL (put it
+behind your reverse proxy or a tunnel). It is dependency-free (stdlib HMAC +
+HTTP).
+
+Because a review outlasts Teams' ~5s response budget, the webhook acks
+immediately and posts the result to a Teams **Incoming Webhook**
+(`TEAMS_INCOMING_WEBHOOK_URL`) when the review finishes.
+
+```bash
+export TEAMS_HMAC_SECRET="<base64 secret Teams shows on webhook creation>"
+export TEAMS_INCOMING_WEBHOOK_URL="https://outlook.office.com/webhook/..."  # optional
+export ANTHROPIC_API_KEY="sk-ant-..." GH_TOKEN="ghp_..."
+vigilant teams --port 8080
+```
+
+Then @-mention the outgoing webhook with a PR link in a channel.
 
 ## Identity and honesty
 

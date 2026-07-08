@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vigilant PR - AI code review that posts as you</title>
+<meta name="description" content="Vigilant PR is a portable, workflow-agnostic AI pull-request reviewer that posts review comments on behalf of you - your GitHub identity, not a bot. By LongIntel." />
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --bg-soft: #121a2b;
+    --card: #151d30;
+    --line: #223049;
+    --text: #e6ecf7;
+    --muted: #93a2bd;
+    --accent: #4da3ff;
+    --accent-soft: rgba(77, 163, 255, 0.14);
+    --crit: #ff5d5d;
+    --med: #ffab4d;
+    --nit: #ffe15d;
+    --ok: #52d17c;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 70% -10%, #17233c 0%, var(--bg) 55%);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 22px; }
+
+  header.site {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 0; border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: .2px; }
+  .brand .eye {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, var(--accent) 0 26%, #0b0f1a 27% 44%, var(--accent) 45% 52%, transparent 53%);
+    box-shadow: 0 0 0 2px var(--line), 0 0 22px var(--accent-soft);
+  }
+  .brand small { color: var(--muted); font-weight: 500; }
+  nav.top a { color: var(--muted); margin-left: 20px; font-size: 14px; }
+  nav.top a:hover { color: var(--text); }
+
+  .hero { padding: 70px 0 40px; }
+  .eyebrow {
+    display: inline-block; font-size: 13px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft); padding: 5px 12px; border-radius: 999px;
+  }
+  h1 { font-size: clamp(34px, 6vw, 56px); line-height: 1.05; margin: 18px 0 14px; }
+  h1 .grad {
+    background: linear-gradient(90deg, #7cc0ff, #4da3ff 60%, #a98bff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede { font-size: 19px; color: var(--muted); max-width: 680px; }
+  .cta { margin-top: 30px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 12px 20px; border-radius: 10px; font-weight: 600;
+    border: 1px solid var(--line);
+  }
+  .btn.primary { background: var(--accent); color: #06101f; border-color: var(--accent); }
+  .btn.primary:hover { text-decoration: none; filter: brightness(1.08); }
+  .btn.ghost { color: var(--text); }
+  .btn.ghost:hover { text-decoration: none; border-color: var(--accent); }
+
+  section { padding: 44px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 26px; margin: 0 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 26px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+
+  .surfaces { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .surface { background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .surface .tag { font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+  .surface h3 { margin: 6px 0; font-size: 16px; }
+  .surface p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  pre {
+    background: #0a1120; border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 20px; overflow-x: auto; font-size: 14px;
+    font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #d6e2f5;
+  }
+  pre .c { color: #6b7d9c; }
+  pre .k { color: #7cc0ff; }
+
+  .sev { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; }
+  .sev span { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.c { background: var(--crit); } .dot.m { background: var(--med); } .dot.n { background: var(--nit); }
+
+  .callout {
+    background: var(--accent-soft); border: 1px solid #274166;
+    border-radius: var(--radius); padding: 18px 20px; color: var(--text);
+  }
+  .callout strong { color: #bfe0ff; }
+
+  footer { border-top: 1px solid var(--line); padding: 30px 0 60px; color: var(--muted); font-size: 14px; }
+  footer .row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <div class="brand">
+      <span class="eye" aria-hidden="true"></span>
+      <span>Vigilant PR <small>by LongIntel</small></span>
+    </div>
+    <nav class="top">
+      <a href="#how">How it works</a>
+      <a href="#surfaces">Triggers</a>
+      <a href="#quickstart">Quickstart</a>
+      <a href="https://github.com/tllongdev/vigilant-pr">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <span class="eyebrow">AI code review</span>
+    <h1>Rigorous PR reviews,<br /><span class="grad">posted as you.</span></h1>
+    <p class="lede">
+      Vigilant PR is a portable, workflow-agnostic pull-request reviewer. It goes to
+      the repo, reviews the PR, and posts severity-tagged inline comments on behalf of
+      <em>you</em> - your GitHub identity, not a generic bot. No per-repo setup.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#quickstart">Get started</a>
+      <a class="btn ghost" href="https://github.com/tllongdev/vigilant-pr">View on GitHub</a>
+    </div>
+  </div>
+
+  <section id="how">
+    <h2>What it does</h2>
+    <p class="sub">The review engine, proven in production, repackaged so it needs no GitHub Actions install.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Two-tier reasoning</h3>
+        <p>Fast Sonnet by default; escalate to Opus with adaptive thinking for the hard PRs where subtle bugs hide.</p>
+      </div>
+      <div class="card">
+        <h3>Adversarial by design</h3>
+        <p>Assumes the code is wrong until proven correct. Every finding cites a concrete path:line and a real failure mode.</p>
+      </div>
+      <div class="card">
+        <h3>Thread-aware re-review</h3>
+        <p>Reads its own prior comments and your replies, validates or re-flags them, and scopes to the incremental diff.</p>
+      </div>
+      <div class="card">
+        <h3>No noise ratchet</h3>
+        <p>Dedups already-raised findings, caps nits, and stays silent on a re-push when there is nothing new to say.</p>
+      </div>
+      <div class="card">
+        <h3>Posts as one review</h3>
+        <p>The whole review lands in a single GitHub call - one notification, not N. Never auto-approves or blocks.</p>
+      </div>
+      <div class="card">
+        <h3>Honest signature</h3>
+        <p>Every comment states it is an AI-assisted first pass commissioned by you, and names the model that ran.</p>
+      </div>
+    </div>
+    <div class="sev" style="margin-top:22px">
+      <span><span class="dot c"></span> Critical - must fix before merge</span>
+      <span><span class="dot m"></span> Medium - real issue, fix before merge</span>
+      <span><span class="dot n"></span> Nit - minor, non-blocking</span>
+    </div>
+  </section>
+
+  <section id="surfaces">
+    <h2>Trigger it however your team works</h2>
+    <p class="sub">One image, one token, every surface. All post on your behalf.</p>
+    <div class="surfaces">
+      <div class="surface">
+        <div class="tag">CLI / Container</div>
+        <h3>One-shot review</h3>
+        <p><code>vigilant review &lt;pr-url&gt;</code> from a shell or <code>docker run</code>.</p>
+      </div>
+      <div class="surface">
+        <div class="tag">Daemon</div>
+        <h3>Review-request watcher</h3>
+        <p>Auto-reviews any PR that tags you as a reviewer. Idempotent, bounded, resilient.</p>
+      </div>
+      <div class="surface">
+        <div class="tag">Chat</div>
+        <h3>Slack (Socket Mode)</h3>
+        <p><code>/review</code>, an @-mention, or an :eyes: reaction on a message with a PR link.</p>
+      </div>
+      <div class="surface">
+        <div class="tag">Chat - beta</div>
+        <h3>Microsoft Teams</h3>
+        <p>@-mention an outgoing webhook with a PR link; results post back to a channel.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="quickstart">
+    <h2>Quickstart</h2>
+    <p class="sub">You need the GitHub CLI authenticated as you (or a <code>GH_TOKEN</code>) and an <code>ANTHROPIC_API_KEY</code>.</p>
+<pre><span class="c"># Install (no-Docker path; needs `gh` on PATH)</span>
+pipx install git+https://github.com/tllongdev/vigilant-pr
+
+<span class="c"># Review a PR and post as you (default Sonnet tier)</span>
+vigilant review https://github.com/owner/repo/pull/123
+
+<span class="c"># Harder PR? Escalate to Opus</span>
+vigilant review 123 --repo owner/repo --opus
+
+<span class="c"># Preview without posting</span>
+vigilant review 123 --repo owner/repo --dry-run</pre>
+
+    <h2 style="margin-top:30px">Run the watcher as a daemon</h2>
+    <p class="sub">Polling only - no inbound ports. Auto-reviews PRs where you are tagged.</p>
+<pre>docker run -d --name vigilant-pr --restart unless-stopped \
+  -e ANTHROPIC_API_KEY -e GH_TOKEN \
+  -e VIGILANT_ORG_ALLOW="acme" \
+  -v vigilant-state:/root/.vigilant \
+  -e VIGILANT_SEEN_PATH=/root/.vigilant/seen.json \
+  ghcr.io/tllongdev/vigilant-pr:latest watch</pre>
+
+    <div class="callout" style="margin-top:26px">
+      <strong>Your review, your identity.</strong> Comments are authored by your GitHub
+      token, so they are your review - carrying an honest AI-assisted signature. Vigilant PR
+      never uses <code>APPROVE</code> or <code>REQUEST_CHANGES</code>; a human still owns the merge decision.
+    </div>
+  </section>
+
+  <footer>
+    <div class="row">
+      <div>Vigilant PR - a LongIntel (LIT) project. MIT licensed.</div>
+      <div>
+        <a href="https://longintel.co">longintel.co</a> ·
+        <a href="https://github.com/tllongdev/vigilant-pr">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</div>
+</body>
+</html>

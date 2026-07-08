@@ -3,9 +3,11 @@
     vigilant review <pr-url-or-number> [--repo owner/repo] [--opus|--sonnet] [--dry-run]
     vigilant threads <pr-url-or-number> [--repo owner/repo] [--dry-run]
     vigilant watch [--once] [--poll-interval N] [--daily-cap N]
+    vigilant slack                      # Slack Socket Mode listener
+    vigilant teams [--host H] [--port P] # Microsoft Teams webhook (beta)
 
-`watch` is the daemon: it polls for PRs where you are a requested reviewer and
-auto-reviews them on your behalf.
+`watch` polls for PRs where you are a requested reviewer. `slack`/`teams` review
+PRs on request from chat. All surfaces post on behalf of your GitHub token.
 """
 
 from __future__ import annotations
@@ -85,6 +87,20 @@ def main(argv: list[str] | None = None) -> int:
     watch_p.add_argument("--daily-cap", type=int, help="Max reviews per UTC day (default 50).")
     _add_model_flags(watch_p)
 
+    slack_p = subparsers.add_parser(
+        "slack",
+        help="Daemon: listen on Slack (Socket Mode) and review PRs on request.",
+    )
+    _add_model_flags(slack_p)
+
+    teams_p = subparsers.add_parser(
+        "teams",
+        help="Daemon (beta): serve a Microsoft Teams outgoing-webhook endpoint.",
+    )
+    teams_p.add_argument("--host", default="0.0.0.0", help="Bind host (default 0.0.0.0).")
+    teams_p.add_argument("--port", type=int, default=8080, help="Bind port (default 8080).")
+    _add_model_flags(teams_p)
+
     args = parser.parse_args(argv)
     model = _resolve_model(args)
     config = Config.from_env(
@@ -102,6 +118,14 @@ def main(argv: list[str] | None = None) -> int:
         return run_threads_only(args.pr, config)
     if args.command == "watch":
         return run_watch(config, once=args.once)
+    if args.command == "slack":
+        from .triggers.slack import run_slack
+
+        return run_slack(config)
+    if args.command == "teams":
+        from .triggers.teams import run_teams
+
+        return run_teams(config, host=args.host, port=args.port)
     parser.error(f"Unknown command: {args.command}")
     return 2
 
