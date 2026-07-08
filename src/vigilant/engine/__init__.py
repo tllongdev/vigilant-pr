@@ -9,6 +9,7 @@ from __future__ import annotations
 from .config import DEFAULT_MODEL, MODEL_PROFILES, OPUS_MODEL, SONNET_MODEL, Config
 from .identity import build_signature, resolve_handle
 from .review import ReviewFailedError, run_review, run_threads_only
+from .watcher import run_watch
 
 __all__ = [
     "Config",
@@ -21,4 +22,5 @@ __all__ = [
     "resolve_handle",
     "run_review",
     "run_threads_only",
+    "run_watch",
 ]
