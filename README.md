@@ -233,6 +233,7 @@ Brand assets live in [`assets/`](assets):
 | `vigilant-pr-logo.svg` | Horizontal lockup for light backgrounds |
 | `vigilant-pr-logo-dark.svg` | Horizontal lockup for dark backgrounds |
 | `vigilant-pr-social.svg` / `.png` | 1200x630 social / OpenGraph banner for link previews |
+| `favicon.ico` | Multi-resolution (16-256px) favicon; also in `docs/site/` |
 
 The mark is a watchful eye whose iris is a scanner aperture - vigilance, not
 approval (Vigilant PR never auto-approves). Palette: `#4da3ff` (blue) to
