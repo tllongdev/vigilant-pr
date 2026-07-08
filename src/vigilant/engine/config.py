@@ -35,6 +35,16 @@ MODEL_PROFILES: dict[str, dict[str, Any]] = {
     },
 }
 
+# Fallback profile for any model without an Anthropic-specific tuning entry
+# (e.g. Groq/Gemini/OpenAI/local models). No extended-thinking params; the
+# signature simply names the model.
+GENERIC_PROFILE: dict[str, Any] = {
+    "thinking": None,
+    "output_config": None,
+    "signature_suffix": "",
+    "tier_label": "Model",
+}
+
 
 @dataclass
 class Config:
@@ -55,6 +65,13 @@ class Config:
     handle: str | None = None
     anthropic_api_key: str | None = None
 
+    # Model-agnostic inference (see engine.providers). `api_base` overrides the
+    # provider's default endpoint (local models, OpenAI-compatible servers).
+    # `temperature`/`max_tokens` apply to OpenAI-compatible providers.
+    api_base: str | None = None
+    temperature: float = 0.2
+    max_tokens: int = 8000
+
     # Watcher (milestone 003)
     poll_interval: int = 120
     daily_cap: int = 50
@@ -69,8 +86,12 @@ class Config:
         """Build a Config from environment variables, then apply explicit overrides.
 
         Recognized env vars:
-          ANTHROPIC_API_KEY         - required for actual review calls
-          VIGILANT_MODEL            - model name
+          ANTHROPIC_API_KEY (+ GROQ_API_KEY, GEMINI_API_KEY, NVIDIA_NIM_API_KEY,
+                                    OPENAI_API_KEY, ...) - provider keys
+          VIGILANT_MODEL            - provider/model string (e.g. groq/llama-3.3-70b-versatile)
+          VIGILANT_API_BASE         - override endpoint (local / OpenAI-compatible servers)
+          VIGILANT_TEMPERATURE      - sampling temperature (OpenAI-compatible)
+          VIGILANT_MAX_TOKENS       - max output tokens (OpenAI-compatible)
           VIGILANT_POLL_INTERVAL    - watcher poll seconds
           VIGILANT_DAILY_CAP        - watcher per-day review cap
           VIGILANT_ORG_ALLOW/DENY   - comma-separated org lists
@@ -80,6 +101,12 @@ class Config:
         cfg.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
         if os.environ.get("VIGILANT_MODEL"):
             cfg.model = os.environ["VIGILANT_MODEL"]
+        if os.environ.get("VIGILANT_API_BASE"):
+            cfg.api_base = os.environ["VIGILANT_API_BASE"]
+        if os.environ.get("VIGILANT_TEMPERATURE"):
+            cfg.temperature = float(os.environ["VIGILANT_TEMPERATURE"])
+        if os.environ.get("VIGILANT_MAX_TOKENS"):
+            cfg.max_tokens = int(os.environ["VIGILANT_MAX_TOKENS"])
         if os.environ.get("VIGILANT_POLL_INTERVAL"):
             cfg.poll_interval = int(os.environ["VIGILANT_POLL_INTERVAL"])
         if os.environ.get("VIGILANT_DAILY_CAP"):

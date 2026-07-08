@@ -24,16 +24,19 @@ Actions install.
 
 Milestones 001-005 complete: engine extraction, container + GHCR image, the
 review-request watcher daemon, the Slack trigger, and the Teams trigger (beta) +
-docs. See `docs/` in the planning repo.
+docs. Plus model-agnostic inference (Claude + free tiers + local models). See
+`docs/` in the planning repo.
 
 ## Requirements
 
 - Python 3.12+
 - The GitHub CLI `gh`, authenticated as the user who should author the comments
   (`gh auth login`), or a `GH_TOKEN` env var with Pull requests: read/write.
-- `ANTHROPIC_API_KEY` in the environment.
+- An API key for **any supported model provider** - including free, no-card
+  tiers (Groq, Google Gemini, NVIDIA NIM). See [Models](#models-run-any-model-including-free-tiers).
 
-The core engine is dependency-free (standard library only).
+The core engine is dependency-free (standard library only) - model calls go over
+plain HTTP, no SDKs.
 
 ## Install
 
@@ -55,6 +58,48 @@ vigilant review 123 --repo owner/repo --opus
 # Preview without posting
 vigilant review 123 --repo owner/repo --dry-run
 ```
+
+## Models (run any model, including free tiers)
+
+Vigilant PR is model-agnostic. Pick a model with a `provider/model` string via
+`--model` or the `VIGILANT_MODEL` env var, and supply that provider's key. A bare
+name (e.g. `claude-sonnet-4-6`) is treated as Anthropic, so existing setups keep
+working. Under the hood there are just two wire protocols - the Anthropic
+Messages API and the OpenAI-compatible `/chat/completions` API - so most
+providers, local servers, and gateways work out of the box.
+
+| You have... | `VIGILANT_MODEL` | Also set |
+|---|---|---|
+| **Nothing - want a free real model** | `groq/llama-3.3-70b-versatile` | `GROQ_API_KEY` (free, no card) |
+| A free Gemini key | `gemini/gemini-2.5-flash` | `GEMINI_API_KEY` (free tier) |
+| A free NVIDIA key | `nvidia_nim/deepseek-ai/deepseek-v3.2-exp` | `NVIDIA_NIM_API_KEY` (free, no card) |
+| A Claude / Anthropic key (best results) | `anthropic/claude-sonnet-4-6` (or `-opus-4-7`) | `ANTHROPIC_API_KEY` |
+| An OpenAI key | `openai/gpt-5.5` | `OPENAI_API_KEY` |
+| An OpenRouter key | `openrouter/meta-llama/llama-3.3-70b-instruct` | `OPENROUTER_API_KEY` |
+| A local model (Ollama) | `ollama/qwen2.5:14b` | `VIGILANT_API_BASE=http://localhost:11434/v1` if not default |
+| Any OpenAI-compatible server (vLLM, LM Studio, TGI) | `openai_compatible/<model>` | `VIGILANT_API_BASE`, `VIGILANT_API_KEY` (if required) |
+| Just want to see it run | `mock` | nothing (scripted output, no key, no cost) |
+
+Free tiers get you started in ~2 minutes:
+
+- **Groq** (fastest): https://console.groq.com/keys (key starts with `gsk_`)
+- **Gemini**: https://aistudio.google.com/apikey
+- **NVIDIA NIM**: https://build.nvidia.com (key starts with `nvapi-`)
+
+```bash
+export GROQ_API_KEY=gsk_...
+export VIGILANT_MODEL=groq/llama-3.3-70b-versatile
+vigilant review https://github.com/owner/repo/pull/123
+```
+
+Run `vigilant models` to see which providers your credentials can reach (and, where
+the provider exposes a list endpoint, the exact model ids you can use).
+
+> **For the deepest reviews, use a frontier model.** Adversarial bug-finding
+> scales with model quality; Claude Sonnet 4.6 (default) or Opus 4.7 catch subtler
+> issues than small free models. The free tiers are great for trying it out and
+> for lighter PRs. Extended-thinking tuning (Opus adaptive thinking) applies only
+> to the Anthropic path; other providers run with a low review temperature.
 
 ## Watcher (daemon mode)
 

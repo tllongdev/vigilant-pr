@@ -1,13 +1,16 @@
 """Vigilant PR command-line interface.
 
-    vigilant review <pr-url-or-number> [--repo owner/repo] [--opus|--sonnet] [--dry-run]
+    vigilant review <pr-url-or-number> [--repo owner/repo] [--model P/M|--opus|--sonnet] [--dry-run]
     vigilant threads <pr-url-or-number> [--repo owner/repo] [--dry-run]
     vigilant watch [--once] [--poll-interval N] [--daily-cap N]
     vigilant slack                      # Slack Socket Mode listener
     vigilant teams [--host H] [--port P] # Microsoft Teams webhook (beta)
+    vigilant models                     # list models your credentials can reach
 
 `watch` polls for PRs where you are a requested reviewer. `slack`/`teams` review
-PRs on request from chat. All surfaces post on behalf of your GitHub token.
+PRs on request from chat. All surfaces post on behalf of your GitHub token, and
+run against any model (Claude, or free tiers like Groq/Gemini/NVIDIA, or a local
+model) via a `provider/model` string - see `vigilant models`.
 """
 
 from __future__ import annotations
@@ -17,17 +20,25 @@ import sys
 
 from .engine import (
     DEFAULT_MODEL,
-    MODEL_PROFILES,
     OPUS_MODEL,
+    PROVIDERS,
     SONNET_MODEL,
     Config,
+    list_models,
+    provider_api_key,
     run_review,
     run_threads_only,
     run_watch,
 )
 
 
-def _resolve_model(args: argparse.Namespace) -> str:
+def _resolve_model(args: argparse.Namespace) -> str | None:
+    """Return the explicit model to use, or None to defer to env / default.
+
+    Returning None (rather than DEFAULT_MODEL) is important: it lets a
+    VIGILANT_MODEL env var take effect instead of being clobbered by the
+    argparse default.
+    """
     if getattr(args, "opus", False) and getattr(args, "sonnet", False):
         sys.stderr.write("Cannot pass both --opus and --sonnet.\n")
         sys.exit(1)
@@ -35,7 +46,7 @@ def _resolve_model(args: argparse.Namespace) -> str:
         return OPUS_MODEL
     if getattr(args, "sonnet", False):
         return SONNET_MODEL
-    return getattr(args, "model", DEFAULT_MODEL)
+    return getattr(args, "model", None)
 
 
 def _add_model_flags(sub: argparse.ArgumentParser) -> None:
@@ -44,8 +55,10 @@ def _add_model_flags(sub: argparse.ArgumentParser) -> None:
         help="GitHub handle to attribute the review to. Defaults to the authenticated gh user.",
     )
     sub.add_argument(
-        "--model", default=DEFAULT_MODEL, choices=sorted(MODEL_PROFILES),
-        help=f"Model to use. Default: {DEFAULT_MODEL}.",
+        "--model", default=None,
+        help="Model as 'provider/model' (e.g. groq/llama-3.3-70b-versatile, "
+             "anthropic/claude-sonnet-4-6, ollama/qwen2.5:14b). A bare name is "
+             f"treated as Anthropic. Defaults to VIGILANT_MODEL or {DEFAULT_MODEL}.",
     )
     sub.add_argument("--opus", action="store_true", help=f"Shortcut for --model {OPUS_MODEL}.")
     sub.add_argument("--sonnet", action="store_true", help=f"Shortcut for --model {SONNET_MODEL}.")
@@ -101,7 +114,14 @@ def main(argv: list[str] | None = None) -> int:
     teams_p.add_argument("--port", type=int, default=8080, help="Bind port (default 8080).")
     _add_model_flags(teams_p)
 
+    subparsers.add_parser(
+        "models",
+        help="List providers and the models your credentials can reach.",
+    )
+
     args = parser.parse_args(argv)
+    if args.command == "models":
+        return run_models(Config.from_env())
     model = _resolve_model(args)
     config = Config.from_env(
         model=model,
@@ -128,6 +148,59 @@ def main(argv: list[str] | None = None) -> int:
         return run_teams(config, host=args.host, port=args.port)
     parser.error(f"Unknown command: {args.command}")
     return 2
+
+
+# Example model strings shown for providers whose key is present but that expose
+# no (or a very large) list endpoint.
+_EXAMPLE_MODELS = {
+    "anthropic": "anthropic/claude-sonnet-4-6",
+    "openai": "openai/gpt-5.5",
+    "groq": "groq/llama-3.3-70b-versatile",
+    "gemini": "gemini/gemini-2.5-flash",
+    "nvidia_nim": "nvidia_nim/deepseek-ai/deepseek-v3.2-exp",
+    "openrouter": "openrouter/meta-llama/llama-3.3-70b-instruct",
+    "ollama": "ollama/qwen2.5:14b",
+    "openai_compatible": "openai_compatible/<model> (set VIGILANT_API_BASE)",
+}
+
+
+def run_models(config: Config) -> int:
+    """Print each provider's status and the models the credentials can reach."""
+    print("Vigilant PR - model providers\n")
+    any_ready = False
+    for provider in PROVIDERS:
+        if provider == "mock":
+            continue
+        needs_key = bool(PROVIDERS[provider].get("key_env"))
+        has_key = provider_api_key(provider) is not None
+        ready = (not needs_key) or has_key
+        # Count only cloud providers with a real key toward "any_ready" so the
+        # free-tier hint still shows when the user has nothing configured.
+        any_ready = any_ready or (has_key and provider != "openai_compatible")
+        status = "ready " if ready else "no key"
+        key_env = PROVIDERS[provider].get("key_env") or "(keyless)"
+        print(f"[{status}] {provider:<18} key: {key_env}")
+        if ready:
+            models = list_models(provider, config)
+            if models:
+                for m in models[:12]:
+                    print(f"           {provider}/{m}")
+                if len(models) > 12:
+                    print(f"           ... and {len(models) - 12} more")
+            else:
+                print(f"           e.g. {_EXAMPLE_MODELS.get(provider, provider + '/<model>')}")
+        else:
+            print(f"           set {key_env} to enable  (e.g. {_EXAMPLE_MODELS.get(provider, '')})")
+        print()
+
+    print("Set the model with VIGILANT_MODEL or --model 'provider/model'.")
+    if not any_ready:
+        print("\nNo provider keys detected. Free options (no credit card):")
+        print("  Groq:   https://console.groq.com/keys      -> export GROQ_API_KEY=gsk_...")
+        print("  Gemini: https://aistudio.google.com/apikey  -> export GEMINI_API_KEY=...")
+        print("  NVIDIA: https://build.nvidia.com             -> export NVIDIA_NIM_API_KEY=nvapi-...")
+        print("Then: export VIGILANT_MODEL=groq/llama-3.3-70b-versatile")
+    return 0
 
 
 if __name__ == "__main__":

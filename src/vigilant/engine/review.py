@@ -12,36 +12,21 @@ replaces the original module's `main()`.
 from __future__ import annotations
 
 import json
-import random
 import re
 import sys
-import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from .config import DEFAULT_MODEL, MODEL_PROFILES, Config
+from .config import GENERIC_PROFILE, MODEL_PROFILES, Config
+from .errors import ReviewFailedError
 from .identity import (
     build_signature,
     is_signed_comment,
     resolve_handle,
     signature_index,
 )
+from .providers import call_model, missing_key_message, provider_api_key, resolve_provider
 from .util import run
-
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_VERSION = "2023-06-01"
-
-
-class ReviewFailedError(Exception):
-    """Raised when the review cannot be completed (API errors, parse failures)."""
-
-    def __init__(self, reason: str, exit_code: int = 2):
-        super().__init__(reason)
-        self.reason = reason
-        self.exit_code = exit_code
-
 
 # On a re-review, only these severities are posted. Nits are suppressed so re-runs
 # stop drilling into style minutiae on code that already passed an earlier pass.
@@ -471,94 +456,6 @@ def parse_diff_lines(diff_text: str) -> dict[str, set[int]]:
     return valid
 
 
-RETRY_WAITS_SECONDS = (5, 10, 20, 45, 90, 180, 360)
-
-
-def call_anthropic(
-    system: str,
-    user: str,
-    api_key: str,
-    model: str,
-    retry_waits: tuple[int, ...] = RETRY_WAITS_SECONDS,
-) -> str:
-    """Call the Anthropic Messages API with the model's reasoning profile.
-
-    Retries on 429 and 5xx using the wait schedule. Honors `retry-after` when
-    supplied. 4xx errors other than 429 are not retried. Returns concatenated
-    text content blocks.
-    """
-    max_attempts = 1 + len(retry_waits)
-    profile = MODEL_PROFILES.get(model, MODEL_PROFILES[DEFAULT_MODEL])
-    payload: dict[str, Any] = {
-        "model": model,
-        "max_tokens": 16000,
-        "system": system,
-        "messages": [{"role": "user", "content": user}],
-    }
-    if profile.get("thinking"):
-        payload["thinking"] = profile["thinking"]
-    if profile.get("output_config"):
-        payload["output_config"] = profile["output_config"]
-    body = json.dumps(payload).encode("utf-8")
-    headers = {
-        "Content-Type": "application/json",
-        "x-api-key": api_key,
-        "anthropic-version": ANTHROPIC_VERSION,
-    }
-
-    last_error: str = ""
-    for attempt in range(1, max_attempts + 1):
-        req = urllib.request.Request(
-            ANTHROPIC_API_URL, data=body, headers=headers, method="POST"
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=600) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            text_blocks = [
-                b.get("text", "")
-                for b in data.get("content", [])
-                if b.get("type") == "text"
-            ]
-            return "".join(text_blocks).strip()
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="replace")
-            last_error = f"HTTP {e.code}: {err_body}"
-            retryable = e.code == 429 or 500 <= e.code < 600
-            if not retryable or attempt == max_attempts:
-                sys.stderr.write(f"Anthropic API error {last_error}\n")
-                raise ReviewFailedError(
-                    f"Anthropic API error after {attempt} attempt(s): HTTP {e.code}"
-                ) from e
-            retry_after = e.headers.get("retry-after") if e.headers else None
-            if retry_after and retry_after.isdigit():
-                wait = float(retry_after)
-            else:
-                wait = retry_waits[attempt - 1] + random.uniform(0, 2)
-            sys.stderr.write(
-                f"Anthropic returned {e.code} (attempt {attempt}/{max_attempts}); "
-                f"retrying in {wait:.1f}s...\n"
-            )
-            time.sleep(wait)
-        except urllib.error.URLError as e:
-            last_error = f"connection error: {e}"
-            if attempt == max_attempts:
-                sys.stderr.write(f"Anthropic API {last_error}\n")
-                raise ReviewFailedError(
-                    f"Anthropic API connection error after {attempt} attempt(s): {e}"
-                ) from e
-            wait = retry_waits[attempt - 1] + random.uniform(0, 2)
-            sys.stderr.write(
-                f"Anthropic connection error (attempt {attempt}/{max_attempts}); "
-                f"retrying in {wait:.1f}s: {e}\n"
-            )
-            time.sleep(wait)
-
-    sys.stderr.write(
-        f"Anthropic API exhausted {max_attempts} attempts. Last error: {last_error}\n"
-    )
-    raise ReviewFailedError(f"Anthropic API exhausted {max_attempts} attempts. Last: {last_error}")
-
-
 def parse_review_json(text: str) -> dict[str, Any]:
     """Extract the JSON object from the model's response, tolerant of stray prose."""
     try:
@@ -743,12 +640,9 @@ def post_failure_comment(repo: str, pr_number: int, reason: str, model: str) -> 
 
 def run_threads_only(target: str, config: Config) -> int:
     """Lightweight mode: validate human replies to prior AI comments only."""
-    api_key = config.anthropic_api_key
-    if not api_key:
-        sys.stderr.write(
-            "ANTHROPIC_API_KEY not set. Get one at "
-            "https://console.anthropic.com/settings/keys\n"
-        )
+    provider, _ = resolve_provider(config.model)
+    if provider not in ("mock", "ollama") and not provider_api_key(provider):
+        sys.stderr.write(missing_key_message(provider) + "\n")
         return 1
 
     pr_number, url_repo = parse_pr_arg(target)
@@ -776,9 +670,9 @@ def run_threads_only(target: str, config: Config) -> int:
         thread_context=thread_context,
     )
 
-    sys.stderr.write(f"Calling Anthropic (threads-only) {config.model}...\n")
+    sys.stderr.write(f"Calling model (threads-only) {config.model}...\n")
     try:
-        raw = call_anthropic(THREADS_ONLY_SYSTEM_PROMPT, user_prompt, api_key, config.model)
+        raw = call_model(THREADS_ONLY_SYSTEM_PROMPT, user_prompt, config)
         result = parse_review_json(raw)
     except ReviewFailedError as e:
         sys.stderr.write(f"Thread validation failed: {e.reason}\n")
@@ -815,14 +709,11 @@ def run_review(target: str, config: Config) -> int:
     error, 3 GitHub error (the latter raised via util.run -> sys.exit).
     """
     model = config.model
-    profile = MODEL_PROFILES.get(model, MODEL_PROFILES[DEFAULT_MODEL])
+    profile = MODEL_PROFILES.get(model, GENERIC_PROFILE)
 
-    api_key = config.anthropic_api_key
-    if not api_key:
-        sys.stderr.write(
-            "ANTHROPIC_API_KEY not set. Get one at "
-            "https://console.anthropic.com/settings/keys\n"
-        )
+    provider, _ = resolve_provider(model)
+    if provider not in ("mock", "ollama") and not provider_api_key(provider):
+        sys.stderr.write(missing_key_message(provider) + "\n")
         return 1
 
     pr_number, url_repo = parse_pr_arg(target)
@@ -886,11 +777,11 @@ def run_review(target: str, config: Config) -> int:
     )
 
     sys.stderr.write(
-        f"Calling Anthropic [{profile['tier_label']}] {model} {profile['signature_suffix']}...\n"
+        f"Calling model [{profile['tier_label']}] {model} {profile['signature_suffix']}...\n"
     )
 
     try:
-        raw = call_anthropic(SYSTEM_PROMPT, user_prompt, api_key, model)
+        raw = call_model(SYSTEM_PROMPT, user_prompt, config)
         review = parse_review_json(raw)
     except ReviewFailedError as e:
         if not config.dry_run:

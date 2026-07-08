@@ -199,6 +199,10 @@
         <h3>Honest signature</h3>
         <p>Every comment states it is an AI-assisted first pass commissioned by you, and names the model that ran.</p>
       </div>
+      <div class="card">
+        <h3>Run any model</h3>
+        <p>Model-agnostic: Claude for the deepest reviews, or free no-card tiers (Groq, Gemini, NVIDIA), or a local model. One <code>provider/model</code> string.</p>
+      </div>
     </div>
     <div class="sev" style="margin-top:22px">
       <span><span class="dot c"></span> Critical - must fix before merge</span>
@@ -236,17 +240,22 @@
 
   <section id="quickstart">
     <h2>Quickstart</h2>
-    <p class="sub">You need the GitHub CLI authenticated as you (or a <code>GH_TOKEN</code>) and an <code>ANTHROPIC_API_KEY</code>.</p>
+    <p class="sub">You need the GitHub CLI authenticated as you (or a <code>GH_TOKEN</code>) and a model key - Claude, or a free tier like Groq/Gemini/NVIDIA.</p>
 <pre><span class="c"># Install (no-Docker path; needs `gh` on PATH)</span>
 pipx install git+https://github.com/tllongdev/vigilant-pr
 
-<span class="c"># Review a PR and post as you (default Sonnet tier)</span>
+<span class="c"># Run free: grab a no-card Groq key at console.groq.com/keys</span>
+export <span class="k">GROQ_API_KEY</span>=gsk_...
+export <span class="k">VIGILANT_MODEL</span>=groq/llama-3.3-70b-versatile
+
+<span class="c"># Review a PR and post as you</span>
 vigilant review https://github.com/owner/repo/pull/123
 
-<span class="c"># Harder PR? Escalate to Opus</span>
+<span class="c"># Or bring Claude for the deepest reviews</span>
+export <span class="k">ANTHROPIC_API_KEY</span>=sk-ant-...
 vigilant review 123 --repo owner/repo --opus
 
-<span class="c"># Preview without posting</span>
+<span class="c"># Preview without posting  (or VIGILANT_MODEL=mock for a keyless demo)</span>
 vigilant review 123 --repo owner/repo --dry-run</pre>
 
     <h2 style="margin-top:30px">Run the watcher as a daemon</h2>
