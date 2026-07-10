@@ -138,3 +138,38 @@ def test_already_reviewed_false_for_new_head(
 ) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(watcher, "fetch_last_bot_review_sha", lambda repo, num: "oldsha")
     assert watcher.already_reviewed("acme/widget", 12, "newsha", tmp_path / "seen.json") is False
+
+
+# --- run_watch startup key guard (model-agnostic) ------------------------
+
+
+def _clear_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    from vigilant.engine import providers
+
+    for spec in providers.PROVIDERS.values():
+        key_env = spec.get("key_env")
+        if key_env:
+            monkeypatch.delenv(key_env, raising=False)
+
+
+def test_run_watch_blocks_when_selected_provider_key_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_provider_keys(monkeypatch)
+    cfg = Config(model="groq/llama-3.3-70b-versatile")
+    assert watcher.run_watch(cfg, once=True) == 1
+
+
+def test_run_watch_uses_present_nonanthropic_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_provider_keys(monkeypatch)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_x")
+    monkeypatch.setattr(watcher, "find_review_requests", lambda cfg: [])
+    cfg = Config(model="groq/llama-3.3-70b-versatile")
+    assert watcher.run_watch(cfg, once=True) == 0
+
+
+def test_run_watch_starts_for_keyless_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_provider_keys(monkeypatch)
+    monkeypatch.setattr(watcher, "find_review_requests", lambda cfg: [])
+    cfg = Config(model="mock")
+    assert watcher.run_watch(cfg, once=True) == 0

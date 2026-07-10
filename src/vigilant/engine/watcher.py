@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .config import Config
+from .providers import missing_key_message, provider_api_key, resolve_provider
 from .review import fetch_last_bot_review_sha, run_review
 from .util import run
 
@@ -135,11 +136,9 @@ def run_watch(config: Config, once: bool = False, seen_path: str | Path | None =
 
     `once=True` runs a single pass and returns (useful for cron or testing).
     """
-    if not config.anthropic_api_key:
-        sys.stderr.write(
-            "ANTHROPIC_API_KEY not set. Get one at "
-            "https://console.anthropic.com/settings/keys\n"
-        )
+    provider, _ = resolve_provider(config.model)
+    if provider not in ("mock", "ollama") and not provider_api_key(provider):
+        sys.stderr.write(missing_key_message(provider) + "\n")
         return 1
 
     day = datetime.now(UTC).date()
