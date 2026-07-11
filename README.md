@@ -67,10 +67,10 @@ uv tool install .
 ## Usage
 
 ```bash
-# Review a PR and post as you (Sonnet 4.6, the default tier)
+# Review a PR and post as you (Sonnet 5, the default tier)
 vigilant review https://github.com/owner/repo/pull/123
 
-# Escalate to Opus 4.7 for a hard PR
+# Escalate to Opus 4.8 for a hard PR
 vigilant review 123 --repo owner/repo --opus
 
 # Preview without posting
@@ -81,7 +81,7 @@ vigilant review 123 --repo owner/repo --dry-run
 
 Vigilant PR is model-agnostic. Pick a model with a `provider/model` string via
 `--model` or the `VIGILANT_MODEL` env var, and supply that provider's key. A bare
-name (e.g. `claude-sonnet-4-6`) is treated as Anthropic, so existing setups keep
+name (e.g. `claude-sonnet-5`) is treated as Anthropic, so existing setups keep
 working. Under the hood there are just two wire protocols - the Anthropic
 Messages API and the OpenAI-compatible `/chat/completions` API - so most
 providers, local servers, and gateways work out of the box.
@@ -91,7 +91,7 @@ providers, local servers, and gateways work out of the box.
 | **Nothing - want a free real model** | `groq/llama-3.3-70b-versatile` | `GROQ_API_KEY` (free, no card) |
 | A free Gemini key | `gemini/gemini-2.5-flash` | `GEMINI_API_KEY` (free tier) |
 | A free NVIDIA key | `nvidia_nim/deepseek-ai/deepseek-v3.2-exp` | `NVIDIA_NIM_API_KEY` (free, no card) |
-| A Claude / Anthropic key (best results) | `anthropic/claude-sonnet-4-6` (or `-opus-4-7`) | `ANTHROPIC_API_KEY` |
+| A Claude / Anthropic key (best results) | `anthropic/claude-sonnet-5` (or `-opus-4-8`) | `ANTHROPIC_API_KEY` |
 | An OpenAI key | `openai/gpt-5.5` | `OPENAI_API_KEY` |
 | An OpenRouter key | `openrouter/meta-llama/llama-3.3-70b-instruct` | `OPENROUTER_API_KEY` |
 | A local model (Ollama) | `ollama/qwen2.5:14b` | `VIGILANT_API_BASE=http://localhost:11434/v1` if not default |
@@ -114,7 +114,7 @@ Run `vigilant models` to see which providers your credentials can reach (and, wh
 the provider exposes a list endpoint, the exact model ids you can use).
 
 > **For the deepest reviews, use a frontier model.** Adversarial bug-finding
-> scales with model quality; Claude Sonnet 4.6 (default) or Opus 4.7 catch subtler
+> scales with model quality; Claude Sonnet 5 (default) or Opus 4.8 catch subtler
 > issues than small free models. The free tiers are great for trying it out and
 > for lighter PRs. Extended-thinking tuning (Opus adaptive thinking) applies only
 > to the Anthropic path; other providers run with a low review temperature.
@@ -146,7 +146,7 @@ exclusive:
 ```bash
 export VIGILANT_ORG_ALLOW="acme,acme-labs"      # only these orgs
 export VIGILANT_REPO_DENY="acme/secret-repo"    # never this repo
-export VIGILANT_MODEL="claude-opus-4-7"          # default tier for the daemon
+export VIGILANT_MODEL="claude-opus-4-8"          # default tier for the daemon
 ```
 
 ### Deploy as a container
@@ -235,11 +235,17 @@ Then @-mention the outgoing webhook with a PR link in a channel.
 
 ## Identity and honesty
 
-Comments are authored by your GitHub token, so they are *your* review. Every
-comment carries a signature block making clear it is an AI-assisted first pass
-run by you, and naming the model that ran. Vigilant PR never uses
-`REQUEST_CHANGES` or `APPROVE` - severity is conveyed by markers, and humans
-still own approval.
+Comments are authored by your GitHub token, so they are *your* review and read
+as your own writing - there is no visible bot disclaimer. Each body carries a
+hidden HTML-comment marker (invisible on GitHub) that lets the tool recognize
+its own prior comments for dedup and re-review.
+
+Approval is mechanical and honest: the review is submitted as **APPROVE** when
+there are no blocking findings (no critical, no medium) - so nit-only or clean
+PRs get approved with their comments attached - and as a **COMMENT** when
+anything blocks (or a prior concern is re-flagged as unresolved). It never uses
+`REQUEST_CHANGES`, so it surfaces problems without hard-blocking the PR. The
+goal is to move PRs forward unless something genuinely blocks merge.
 
 ## Branding
 
@@ -253,9 +259,8 @@ Brand assets live in [`assets/`](assets):
 | `vigilant-pr-social.svg` / `.png` | 1200x630 social / OpenGraph banner for link previews |
 | `favicon.ico` | Multi-resolution (16-256px) favicon; also in `docs/site/` |
 
-The mark is a watchful eye whose iris is a scanner aperture - vigilance, not
-approval (Vigilant PR never auto-approves). Palette: `#4da3ff` (blue) to
-`#a98bff` (violet) on `#0b0f1a` ink.
+The mark is a watchful eye whose iris is a scanner aperture. Palette: `#4da3ff`
+(blue) to `#a98bff` (violet) on `#0b0f1a` ink.
 
 ## License
 

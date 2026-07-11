@@ -65,7 +65,7 @@ def _add_model_flags(sub: argparse.ArgumentParser) -> None:
     sub.add_argument(
         "--model", default=None,
         help="Model as 'provider/model' (e.g. groq/llama-3.3-70b-versatile, "
-             "anthropic/claude-sonnet-4-6, ollama/qwen2.5:14b). A bare name is "
+             "anthropic/claude-sonnet-5, ollama/qwen2.5:14b). A bare name is "
              f"treated as Anthropic. Defaults to VIGILANT_MODEL or {DEFAULT_MODEL}.",
     )
     sub.add_argument("--opus", action="store_true", help=f"Shortcut for --model {OPUS_MODEL}.")
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="vigilant",
         description=(
             "Vigilant PR - review a pull request and post comments on your behalf. "
-            "Defaults to Sonnet 4.6; pass --opus for Opus 4.7 on hard PRs."
+            "Defaults to Sonnet 5; pass --opus for Opus 4.8 on hard PRs."
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -192,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
 # Example model strings shown for providers whose key is present but that expose
 # no (or a very large) list endpoint.
 _EXAMPLE_MODELS = {
-    "anthropic": "anthropic/claude-sonnet-4-6",
+    "anthropic": "anthropic/claude-sonnet-5",
     "openai": "openai/gpt-5.5",
     "groq": "groq/llama-3.3-70b-versatile",
     "gemini": "gemini/gemini-2.5-flash",

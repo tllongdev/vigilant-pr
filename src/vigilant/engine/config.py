@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-SONNET_MODEL = "claude-sonnet-4-6"
-OPUS_MODEL = "claude-opus-4-7"
+SONNET_MODEL = "claude-sonnet-5"
+OPUS_MODEL = "claude-opus-4-8"
 DEFAULT_MODEL = SONNET_MODEL
 
 # Per-model reasoning configuration. Sonnet runs without extended thinking at

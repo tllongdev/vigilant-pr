@@ -194,11 +194,11 @@
       </div>
       <div class="card">
         <h3>Posts as one review</h3>
-        <p>The whole review lands in a single GitHub call - one notification, not N. Never auto-approves or blocks.</p>
+        <p>The whole review lands in a single GitHub call - one notification, not N. Approves when nothing blocks; comments when it does.</p>
       </div>
       <div class="card">
-        <h3>Honest signature</h3>
-        <p>Every comment states it is an AI-assisted first pass commissioned by you, and names the model that ran.</p>
+        <h3>Reads as your review</h3>
+        <p>Authored by your token with no visible bot disclaimer - just a hidden marker so re-reviews dedup cleanly.</p>
       </div>
       <div class="card">
         <h3>Run any model</h3>
@@ -270,8 +270,9 @@ vigilant review 123 --repo owner/repo --dry-run</pre>
 
     <div class="callout" style="margin-top:26px">
       <strong>Your review, your identity.</strong> Comments are authored by your GitHub
-      token, so they are your review - carrying an honest AI-assisted signature. Vigilant PR
-      never uses <code>APPROVE</code> or <code>REQUEST_CHANGES</code>; a human still owns the merge decision.
+      token, so they read as your own review (no visible bot disclaimer). It submits an
+      <code>APPROVE</code> when nothing blocks and a <code>COMMENT</code> when something does -
+      never <code>REQUEST_CHANGES</code>, so it moves PRs forward without hard-blocking.
     </div>
   </section>
 

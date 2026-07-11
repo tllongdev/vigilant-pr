@@ -62,8 +62,7 @@ Output rules:
         "reply": "<brief response validating or contesting the human's reply>"
       }}
     ],
-    "skipped": ["<things you could not verify>"],
-    "event": "REQUEST_CHANGES" | "COMMENT"  # REQUEST_CHANGES iff any 'critical' finding
+    "skipped": ["<things you could not verify>"]
   }}
 
 Review checklist (apply to the diff; skip categories that don't apply):
@@ -96,7 +95,9 @@ Skip:
 - Generated files, *.lock, .venv/, node_modules/, vendored/.
 - Pure docs/typo PRs: a single COMMENT review with a one-line body, no inline noise.
 
-Cite a concrete `path:line` and explain the failure mode in every finding. No vague "consider" without a named bug or risk. Never APPROVE - this is an automated review."""
+Cite a concrete `path:line` and explain the failure mode in every finding. No vague "consider" without a named bug or risk.
+
+Approval is decided mechanically from your findings, not by you: the review is submitted as an APPROVE when there are zero 'critical' and zero 'medium' findings (nit-only or clean), and as a COMMENT otherwise. The goal is to approve unless something genuinely blocks merge, so be honest and precise about severity - do not inflate a nit to 'medium' to avoid approving, and do not downgrade a real blocking bug to 'nit' just to approve. Classify each issue on its actual merit."""
 
 
 THREADS_ONLY_SYSTEM_PROMPT = """You are validating human responses to your prior code review comments. You have no team history and no stake in the PR.
@@ -528,6 +529,24 @@ def format_review_body(
     )
 
 
+def decide_event(
+    findings: list[Finding], thread_responses: list[dict[str, Any]] | None = None
+) -> str:
+    """Choose the GitHub review event from the findings.
+
+    Policy: the goal is to get the PR approved unless something actually blocks
+    merge. APPROVE when there are no blocking findings (critical or medium) -
+    so nit-only or clean reviews approve with their comments attached. Anything
+    blocking, or a prior concern re-flagged as still unresolved, stays a COMMENT
+    (surface it without approving, and without hard-blocking via REQUEST_CHANGES).
+    """
+    blocking = any(f.severity in ("critical", "medium") for f in findings)
+    reflagged = any(
+        (tr.get("disposition") == "re_flagged") for tr in (thread_responses or [])
+    )
+    return "COMMENT" if (blocking or reflagged) else "APPROVE"
+
+
 def post_review(
     repo: str,
     pr_number: int,
@@ -546,20 +565,32 @@ def post_review(
             "side": "RIGHT",
             "body": format_inline_comment(f, sig),
         })
-    payload = {
-        "commit_id": head_sha,
-        "body": body,
-        "event": event,
-        "comments": inline,
-    }
-    out = run([
-        "gh", "api",
-        f"repos/{repo}/pulls/{pr_number}/reviews",
-        "--method", "POST",
-        "--input", "-",
-    ], input_text=json.dumps(payload))
-    parsed = json.loads(out)
-    return str(parsed.get("html_url", ""))
+    def _submit(review_event: str) -> str:
+        payload = {
+            "commit_id": head_sha,
+            "body": body,
+            "event": review_event,
+            "comments": inline,
+        }
+        out = run([
+            "gh", "api",
+            f"repos/{repo}/pulls/{pr_number}/reviews",
+            "--method", "POST",
+            "--input", "-",
+        ], input_text=json.dumps(payload))
+        parsed = json.loads(out)
+        return str(parsed.get("html_url", ""))
+
+    try:
+        return _submit(event)
+    except SystemExit:
+        # GitHub rejects APPROVE on your own PR (and a few other cases). Rather
+        # than lose the whole review, fall back to a plain COMMENT so the
+        # findings still post.
+        if event == "APPROVE":
+            sys.stderr.write("APPROVE rejected by GitHub; falling back to COMMENT.\n")
+            return _submit("COMMENT")
+        raise
 
 
 def cap_nits(findings: list[Finding], cap: int = 5) -> tuple[list[Finding], int]:
@@ -618,15 +649,17 @@ def post_thread_responses(
 
 
 def post_failure_comment(repo: str, pr_number: int, reason: str, model: str) -> None:
-    """Post a PR comment explaining that the automated review could not complete."""
+    """Post a PR comment explaining that the automated review could not complete.
+
+    Unlike a review, this stays visible (it warns that no review ran and the PR
+    still needs a human), but carries only the hidden marker - no bot framing.
+    """
     body = (
-        "> \U0001f916 AI-assisted PR review - **unable to complete**\n"
-        f"> Reviewer model: {model}\n"
-        ">\n"
-        f"> **Reason:** {reason}\n"
-        ">\n"
-        "> The automated review did not run. This PR still requires human review.\n"
-        "> To retry, re-run Vigilant PR against this PR."
+        "**Automated review could not complete.**\n\n"
+        f"Reason: {reason}\n\n"
+        "This PR did not get a review pass and still needs a human review. "
+        "To retry, re-run Vigilant PR against this PR.\n\n"
+        f"{build_signature(model)}"
     )
     try:
         run(
@@ -846,8 +879,8 @@ def run_review(target: str, config: Config) -> int:
             )
         )
 
-    event = "COMMENT"
     thread_responses = review.get("thread_responses", [])
+    event = decide_event(findings + dropped_findings, thread_responses)
 
     # On a re-review with nothing new to say, stay silent rather than posting a
     # "No findings" review on every push.

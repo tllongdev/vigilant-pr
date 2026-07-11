@@ -116,7 +116,6 @@ def test_build_openai_payload_no_json_mode_omits_response_format() -> None:
 def test_mock_returns_valid_review_json() -> None:
     out = providers.call_mock("sys", "usr")
     data = json.loads(out)
-    assert data["event"] == "COMMENT"
     assert data["findings"] == []
     assert "tally" in data
 

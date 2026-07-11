@@ -8,9 +8,9 @@ Vigilant PR runs against any model reachable over one of two wire protocols:
     vLLM, LM Studio and TGI all speak.
 
 A model is selected with a `provider/model` string (e.g. `groq/llama-3.3-70b-versatile`,
-`anthropic/claude-sonnet-4-6`, `ollama/qwen2.5:14b`). A bare string with no
-provider prefix is treated as Anthropic for backward compatibility, so the
-original `claude-sonnet-4-6` / `claude-opus-4-7` keep working unchanged.
+`anthropic/claude-sonnet-5`, `ollama/qwen2.5:14b`). A bare string with no
+provider prefix is treated as Anthropic for backward compatibility, so bare
+Anthropic ids like `claude-sonnet-5` / `claude-opus-4-8` keep working unchanged.
 
 Everything here is stdlib-only (urllib) - no litellm, no SDKs - so the engine
 stays dependency-free and the container stays small.
@@ -72,7 +72,7 @@ _PROVIDER_ALIASES = {
 
 # Recommended model string per provider, used for auto-selection and hints.
 RECOMMENDED_MODELS = {
-    "anthropic": "claude-sonnet-4-6",
+    "anthropic": "claude-sonnet-5",
     "openai": "openai/gpt-5.5",
     "groq": "groq/llama-3.3-70b-versatile",
     "gemini": "gemini/gemini-2.5-flash",
@@ -251,7 +251,6 @@ def call_mock(system: str, user: str) -> str:
         "findings": [],
         "thread_responses": [],
         "skipped": ["Everything - this is mock output with no model."],
-        "event": "COMMENT",
     })
 
 

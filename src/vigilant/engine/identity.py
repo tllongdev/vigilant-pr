@@ -1,9 +1,9 @@
 """Identity and signature handling for Vigilant PR.
 
-Comments are authored by the running user's GitHub token, so they are the user's
-review. To stay honest, every comment carries a signature block making clear it
-is an AI-assisted first pass, naming the model that ran, and (when known) the
-handle it was posted on behalf of.
+Comments are authored by the running user's GitHub token, so they read as the
+user's own review. Each body carries a *hidden* HTML-comment marker (invisible
+on GitHub) rather than a visible disclaimer, so the tool can still recognize its
+own prior comments for dedup / re-review while the review presents as the user's.
 """
 
 from __future__ import annotations
@@ -11,41 +11,40 @@ from __future__ import annotations
 from .config import MODEL_PROFILES
 from .util import run
 
-# Stable prefix on the first line of every Vigilant PR comment/review body. Used
-# both to render the signature and to detect the tool's own prior comments on a
-# re-review. The legacy prefix is the one emitted by the original
-# knowledge-substrate reviewer - matched too so a repo migrating from that tool
-# still gets correct dedup / thread detection.
+# Hidden HTML-comment marker embedded at the top of every Vigilant PR body. It
+# renders invisibly on GitHub, so the review reads as the user's own, but is
+# still detectable for dedup and re-review thread matching.
+SIG_MARKER = "<!-- vigilant-pr-review"
+
+# Legacy VISIBLE signature prefixes still matched for detection so re-reviews of
+# PRs that already carry an older visible signature - Vigilant's own earlier
+# format, or the original knowledge-substrate reviewer - keep correct dedup /
+# thread detection. New reviews never emit these.
 SIG_PREFIX_VIGILANT = "\U0001f916 AI-assisted PR review"
 SIG_PREFIX_LEGACY = "\U0001f916 Automated AI Code Review"
-SIGNATURE_PREFIXES = (SIG_PREFIX_VIGILANT, SIG_PREFIX_LEGACY)
+SIGNATURE_PREFIXES = (SIG_MARKER, SIG_PREFIX_VIGILANT, SIG_PREFIX_LEGACY)
 
 
 def build_signature(model: str, handle: str | None = None) -> str:
-    """Build the 3-line signature block for a comment or review body.
+    """Build the hidden marker line prepended to a comment or review body.
 
-    When `handle` is known the block attributes the review to that user; when it
-    cannot be resolved it falls back to a generic (still honest) block.
+    Renders invisibly on GitHub (an HTML comment), so the review presents as the
+    user's own. Carries the model (and, when known, the handle it was posted on
+    behalf of) as a machine-readable audit trail and dedup key.
     """
     suffix = MODEL_PROFILES.get(model, {}).get("signature_suffix", "")
-    if handle:
-        line1 = f"> {SIG_PREFIX_VIGILANT} - commissioned and posted by @{handle}"
-    else:
-        line1 = f"> {SIG_PREFIX_VIGILANT} - automated first-pass"
-    return (
-        f"{line1}\n"
-        f"> Reviewer model: {model} {suffix}\n"
-        "> An automated first-pass. Not a substitute for a full human review."
-    )
+    model_str = f"{model} {suffix}".strip()
+    who = f"; by=@{handle}" if handle else ""
+    return f"{SIG_MARKER}: AI-assisted first-pass; model={model_str}{who} -->"
 
 
 def is_signed_comment(body: str) -> bool:
-    """True if `body` was authored by Vigilant PR (or the legacy KS reviewer)."""
+    """True if `body` was authored by Vigilant PR (or a legacy signed reviewer)."""
     return any(prefix in body for prefix in SIGNATURE_PREFIXES)
 
 
 def signature_index(body: str) -> int:
-    """Index of the earliest known signature prefix in `body`, or -1 if none."""
+    """Index of the earliest known signature marker/prefix in `body`, or -1."""
     hits = [body.find(prefix) for prefix in SIGNATURE_PREFIXES]
     hits = [i for i in hits if i >= 0]
     return min(hits) if hits else -1

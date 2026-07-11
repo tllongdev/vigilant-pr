@@ -10,6 +10,7 @@ import pytest
 
 from vigilant.engine.config import OPUS_MODEL, SONNET_MODEL
 from vigilant.engine.identity import (
+    SIG_MARKER,
     SIG_PREFIX_LEGACY,
     SIG_PREFIX_VIGILANT,
     build_signature,
@@ -20,11 +21,40 @@ from vigilant.engine.review import (
     Finding,
     _norm_title,
     cap_nits,
+    decide_event,
     filter_to_diff_lines,
     parse_diff_lines,
     parse_pr_arg,
     parse_review_json,
 )
+
+
+def _finding(severity: str) -> Finding:
+    return Finding(severity=severity, path="a.py", line=1, title="t", body="b")
+
+
+def test_decide_event_approves_when_clean() -> None:
+    assert decide_event([]) == "APPROVE"
+
+
+def test_decide_event_approves_when_only_nits() -> None:
+    assert decide_event([_finding("nit"), _finding("nit")]) == "APPROVE"
+
+
+def test_decide_event_comments_on_medium() -> None:
+    assert decide_event([_finding("nit"), _finding("medium")]) == "COMMENT"
+
+
+def test_decide_event_comments_on_critical() -> None:
+    assert decide_event([_finding("critical")]) == "COMMENT"
+
+
+def test_decide_event_comments_when_prior_thread_reflagged() -> None:
+    assert decide_event([_finding("nit")], [{"disposition": "re_flagged"}]) == "COMMENT"
+
+
+def test_decide_event_approves_when_thread_acknowledged() -> None:
+    assert decide_event([_finding("nit")], [{"disposition": "acknowledged"}]) == "APPROVE"
 
 SAMPLE_DIFF = """diff --git a/app.py b/app.py
 index 111..222 100644
@@ -123,22 +153,27 @@ def test_parse_review_json_unparseable_raises() -> None:
         parse_review_json("no json here at all")
 
 
-def test_build_signature_on_behalf_includes_handle_and_model() -> None:
+def test_build_signature_is_hidden_html_comment_with_handle_and_model() -> None:
     sig = build_signature(SONNET_MODEL, handle="octocat")
+    assert sig.startswith(SIG_MARKER)
+    assert sig.endswith("-->")  # renders invisibly on GitHub
     assert "@octocat" in sig
     assert SONNET_MODEL in sig
-    assert sig.startswith("> " + SIG_PREFIX_VIGILANT)
     assert "(effort=medium)" in sig
 
 
-def test_build_signature_without_handle_is_generic_but_honest() -> None:
+def test_build_signature_without_handle_omits_handle_but_stays_detectable() -> None:
     sig = build_signature(OPUS_MODEL, handle=None)
     assert "@" not in sig
     assert OPUS_MODEL in sig
-    assert "automated first-pass" in sig.lower()
+    assert sig.startswith(SIG_MARKER)
+    assert is_signed_comment(sig)
 
 
-def test_is_signed_comment_matches_new_and_legacy() -> None:
+def test_is_signed_comment_matches_hidden_marker_and_legacy() -> None:
+    assert is_signed_comment(build_signature(SONNET_MODEL, handle="octocat"))
+    assert is_signed_comment("Findings: ...\n\n<!-- vigilant-pr-review: x -->")
+    # legacy visible signatures still detected for backward-compatible re-review
     assert is_signed_comment(f"> {SIG_PREFIX_VIGILANT} - commissioned...")
     assert is_signed_comment(f"> {SIG_PREFIX_LEGACY} - context-agnostic...")
     assert not is_signed_comment("a normal human comment")
