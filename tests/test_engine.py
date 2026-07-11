@@ -56,6 +56,21 @@ def test_decide_event_comments_when_prior_thread_reflagged() -> None:
 def test_decide_event_approves_when_thread_acknowledged() -> None:
     assert decide_event([_finding("nit")], [{"disposition": "acknowledged"}]) == "APPROVE"
 
+
+def test_user_prompt_injects_current_date_and_guards_against_hallucinated_dates() -> None:
+    from vigilant.engine.review import USER_PROMPT_TEMPLATE
+
+    assert "{today}" in USER_PROMPT_TEMPLATE
+    rendered = USER_PROMPT_TEMPLATE.format(
+        pr_number=1, repo="o/r", today="2026-07-11", title="t", body="b",
+        base="main", head="feat", head_sha="abc", file_count=1,
+        review_scope_note="", guidance="", diff="", prior_threads_section="",
+    )
+    assert "Today's date is 2026-07-11" in rendered
+    # explicit guard so the model stops flagging valid dates as future/typos
+    assert "future-dated" in rendered
+    assert "training cutoff" in rendered
+
 SAMPLE_DIFF = """diff --git a/app.py b/app.py
 index 111..222 100644
 --- a/app.py

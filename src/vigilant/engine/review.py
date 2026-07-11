@@ -15,6 +15,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from .config import GENERIC_PROFILE, MODEL_PROFILES, Config
@@ -133,6 +134,8 @@ Output the validation JSON now. Nothing before or after."""
 
 
 USER_PROMPT_TEMPLATE = """Review pull request #{pr_number} in {repo}.
+
+Today's date is {today}. Treat this as the ground-truth current date. Do NOT flag any date as "future-dated", "a typo", or suspicious by comparing it to your training cutoff - you do not know the current date except from this line. Only flag a date if the diff itself contains evidence it is wrong (e.g. it contradicts another date in the same file).
 
 PR title: {title}
 
@@ -797,6 +800,7 @@ def run_review(target: str, config: Config) -> int:
     user_prompt = USER_PROMPT_TEMPLATE.format(
         pr_number=pr_number,
         repo=repo,
+        today=datetime.now(UTC).date().isoformat(),
         title=pr.get("title", ""),
         body=pr.get("body", "") or "(empty)",
         base=pr.get("baseRefName", ""),
