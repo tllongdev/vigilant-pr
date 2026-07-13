@@ -95,6 +95,18 @@ vigilant review https://github.com/owner/repo/pull/123 --dry-run
 That's the whole flow: install, `init`, watch. Everything below is reference for
 specific models, watcher tuning, and the chat surfaces.
 
+---
+
+<p align="center">
+  <a href="https://square.link/u/A8qxaJVb"><img src="https://img.shields.io/badge/Donate-pay%20what%20you%20want-006aff?style=for-the-badge&logo=square&logoColor=white" alt="Donate to Vigilant PR" /></a>
+</p>
+
+<p align="center"><b>Vigilant PR is free to use right now.</b><br/>
+If it adds value to your workflow, <a href="https://square.link/u/A8qxaJVb">donations</a> go directly toward its continued development and maintenance.<br/>
+Apple Pay and Google Pay supported - one tap, no card number.</p>
+
+---
+
 ## Usage
 
 ```bash
