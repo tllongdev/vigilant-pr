@@ -22,10 +22,16 @@ Actions install.
 
 ## Status
 
-Milestones 001-005 complete: engine extraction, container + GHCR image, the
-review-request watcher daemon, the no-app Slack monitor, and the Teams trigger
-(beta) + docs. Plus model-agnostic inference (Claude + free tiers + local
-models). See `docs/` in the planning repo.
+**v1 - ready to use.** The core (one-shot `review` and the GitHub
+review-request `watch` daemon) reuses a review engine proven in production and
+posts as your GitHub identity. Model-agnostic (Claude + free tiers + local
+models).
+
+Surface maturity:
+- **`review` / `watch` (GitHub) - stable. Start here.**
+- `slack-watch` - **beta**: needs no Slack app, but relies on your Slack session
+  token; validate it in your workspace before depending on it.
+- `teams` - **beta / experimental**.
 
 ## Requirements
 
@@ -64,24 +70,28 @@ pipx install git+https://github.com/tllongdev/vigilant-pr
 uv tool install .
 ```
 
-## Quick start (`vigilant init`)
+## Fastest start (GitHub)
 
-New here? Run the setup wizard - it checks GitHub access, lets you pick a model
-provider (leading with free, no-credit-card options), validates the key, and
-writes a `.env` for you:
+From zero to auto-reviewing PRs as you, in three commands:
 
 ```bash
-vigilant init
+pipx install git+https://github.com/tllongdev/vigilant-pr
+vigilant init      # checks GitHub auth, picks a model (free options first), writes .env
+vigilant watch     # auto-reviews any open PR where you're a requested reviewer
 ```
 
-Then review a PR:
+`vigilant init` walks you through everything: it confirms `gh` is authenticated
+(or prompts you to set `GH_TOKEN`), lets you pick a model provider (leading with
+free, no-credit-card options like Groq), validates the key, and writes a `.env`.
+
+Want to see a review before it posts anything? Dry-run any PR first:
 
 ```bash
-vigilant review https://github.com/owner/repo/pull/123
+vigilant review https://github.com/owner/repo/pull/123 --dry-run
 ```
 
-That's the whole BYO-model flow: install, `init`, review. Everything below is
-for when you want a specific model, the watcher, or Slack.
+That's the whole flow: install, `init`, watch. Everything below is reference for
+specific models, watcher tuning, and the chat surfaces.
 
 ## Usage
 
@@ -191,7 +201,11 @@ The watcher uses only your token. It needs:
 - Repo read access sufficient for `gh search prs --review-requested=@me` to see
   the PRs you are tagged on.
 
-## Slack watch (no app)
+## Slack watch (beta, no app)
+
+> **Beta.** The GitHub `review`/`watch` flow above is the stable core. `slack-watch`
+> works with no Slack app, but it depends on your Slack session token, so validate
+> it in your own workspace before relying on it.
 
 `vigilant slack-watch` polls a Slack channel and reviews any PR you're
 **@-mentioned** on - whether the mention is a top-level message or a reply
