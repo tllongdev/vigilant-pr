@@ -23,9 +23,15 @@ flowchart LR
 
 ## Status
 
-**v1 - ready to use.** The GitHub flow (`review` one-shot + `watch` daemon) is
-stable and model-agnostic (Claude, free tiers, or local models). `slack-watch`
-and `teams` are beta.
+**v1 - ready to use** for reviewing GitHub pull requests.
+
+**Use any AI model you want.** Give Vigilant PR an API key for your preferred
+provider and it uses that model - Claude, GPT, Gemini, Grok, Llama, NVIDIA,
+OpenRouter, or a model you run locally. Some are free, some paid - your choice.
+You just set your key and pick a model (or run `vigilant init`, which does it
+for you). See [Models](#models) for the exact options.
+
+Slack and Teams support also exists, but is still beta.
 
 ## Requirements
 
@@ -33,7 +39,7 @@ and `teams` are beta.
 - The GitHub CLI `gh`, authenticated as the user who should author the comments
   (`gh auth login`), or a `GH_TOKEN` env var with Pull requests: read/write.
 - An API key for **any supported model provider** - including free, no-card
-  tiers (Groq, Google Gemini, NVIDIA NIM). See [Models](#models-run-any-model-including-free-tiers).
+  tiers (Groq, Google Gemini, NVIDIA NIM). See [Models](#models).
 
 The core engine is dependency-free (standard library only) - model calls go over
 plain HTTP, no SDKs.
@@ -118,7 +124,7 @@ vigilant review 123 --repo owner/repo --opus
 vigilant review 123 --repo owner/repo --dry-run
 ```
 
-## Models (run any model, including free tiers)
+## Models
 
 Vigilant PR is model-agnostic. Pick a model with a `provider/model` string via
 `--model` or the `VIGILANT_MODEL` env var, and supply that provider's key. A bare
