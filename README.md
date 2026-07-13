@@ -9,29 +9,23 @@
 
 ---
 
-PR reviews get requested in Slack/Teams by @-mentioning a colleague, or by tagging
-their GitHub username as a reviewer. Vigilant PR lets the tagged reviewer delegate
-a rigorous first-pass review to an agent that goes to the repo, reviews the PR, and
-posts comments as them - with zero repo-side setup.
+Get tagged as a reviewer on a pull request, and Vigilant PR reviews it and posts
+the comments as **you** - your GitHub identity, not a bot. No repo-side setup, no
+GitHub App, just your token.
 
-It reuses the review engine proven in production (two-tier Sonnet/Opus, adversarial
-"assume the code is wrong until proven correct" prompt, severity-tagged inline
-comments, thread-aware re-review, incremental diff scoping, dedup, nit-ratchet,
-single-review posting) and repackages it so it no longer needs a per-repo GitHub
-Actions install.
+```mermaid
+flowchart LR
+    A["You are tagged as a<br/>reviewer on a PR"] --> B["Vigilant PR reads<br/>the PR and diff"]
+    B --> C["Adversarial review,<br/>severity-tagged findings"]
+    C --> D["Posts inline comments<br/>as you, not a bot"]
+    D --> E["Approves if nothing blocks,<br/>comments if it does"]
+```
 
 ## Status
 
-**v1 - ready to use.** The core (one-shot `review` and the GitHub
-review-request `watch` daemon) reuses a review engine proven in production and
-posts as your GitHub identity. Model-agnostic (Claude + free tiers + local
-models).
-
-Surface maturity:
-- **`review` / `watch` (GitHub) - stable. Start here.**
-- `slack-watch` - **beta**: needs no Slack app, but relies on your Slack session
-  token; validate it in your workspace before depending on it.
-- `teams` - **beta / experimental**.
+**v1 - ready to use.** The GitHub flow (`review` one-shot + `watch` daemon) is
+stable and model-agnostic (Claude, free tiers, or local models). `slack-watch`
+and `teams` are beta.
 
 ## Requirements
 
