@@ -173,3 +173,20 @@ def test_run_watch_starts_for_keyless_mock_provider(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(watcher, "find_review_requests", lambda cfg: [])
     cfg = Config(model="mock")
     assert watcher.run_watch(cfg, once=True) == 0
+
+
+def test_github_watch_exits_cleanly_on_ctrl_c(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: object
+) -> None:
+    """Ctrl-C (KeyboardInterrupt) during github-watch should exit 0, not traceback."""
+    from vigilant import cli
+
+    monkeypatch.setenv("VIGILANT_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("GH_TOKEN", "ghp_test")  # so the preflight passes
+    monkeypatch.setenv("VIGILANT_MODEL", "mock")
+
+    def _interrupt(*args: object, **kwargs: object) -> int:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "run_watch", _interrupt)
+    assert cli.main(["github-watch"]) == 0

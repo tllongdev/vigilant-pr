@@ -247,7 +247,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "threads":
         return run_threads_only(args.pr, config)
     if args.command == "github-watch":
-        return run_watch(config, once=args.once)
+        try:
+            return run_watch(config, once=args.once)
+        except KeyboardInterrupt:
+            sys.stderr.write("\nStopped.\n")
+            return 0
     if args.command == "slack-watch":
         from .triggers.slack_poll import run_slack_watch
 
