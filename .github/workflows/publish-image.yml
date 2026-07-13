@@ -2,8 +2,8 @@ name: Publish image
 
 # Builds the Vigilant PR container and pushes it to the GitHub Container
 # Registry under the owner's namespace. Triggered on version tags, published
-# releases, or manually. No PyPI/npm publish - distribution is the image plus
-# `pipx install git+https://github.com/tllongdev/vigilant-pr`.
+# releases, or manually. Runs alongside release.yml (which builds the Python
+# sdist/wheel + GitHub Release, and optionally publishes to PyPI).
 
 on:
   push:

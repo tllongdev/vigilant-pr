@@ -1,0 +1,87 @@
+name: Release
+
+# On a version tag (v1.2.3): build the sdist + wheel, attach them to a GitHub
+# Release (auto-generated notes), and - if enabled - publish to PyPI via Trusted
+# Publishing (OIDC, no stored tokens). The container image is built separately
+# by publish-image.yml, which also triggers on v* tags.
+#
+# Enabling PyPI (one-time): create the project on PyPI, add a Trusted Publisher
+# for this repo + workflow `release.yml` + environment `pypi`, then set the repo
+# variable PUBLISH_TO_PYPI=true. Until then the pypi job is skipped and the
+# GitHub Release (and `pipx install git+...@vX.Y.Z`) still work.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install (with dev extras)
+        run: pip install -e '.[dev]' build
+
+      - name: Gate on tests
+        run: |
+          ruff check src tests
+          mypy src
+          pytest -q
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  github-release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Create/Update release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  pypi:
+    name: Publish to PyPI
+    needs: build
+    if: ${{ vars.PUBLISH_TO_PYPI == 'true' }}
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # OIDC for Trusted Publishing
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1

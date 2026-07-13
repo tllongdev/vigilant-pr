@@ -65,6 +65,8 @@ user with only `GROQ_API_KEY` is never told to "set `ANTHROPIC_API_KEY`".
 ## Install
 
 ```bash
+pipx install git+https://github.com/tllongdev/vigilant-pr@v1.0.0
+# or track the latest development version:
 pipx install git+https://github.com/tllongdev/vigilant-pr
 # or, from a clone:
 uv tool install .
@@ -75,7 +77,7 @@ uv tool install .
 From zero to auto-reviewing PRs as you, in three commands:
 
 ```bash
-pipx install git+https://github.com/tllongdev/vigilant-pr
+pipx install git+https://github.com/tllongdev/vigilant-pr@v1.0.0
 vigilant init      # checks GitHub auth, picks a model (free options first), writes .env
 vigilant watch     # auto-reviews any open PR where you're a requested reviewer
 ```
