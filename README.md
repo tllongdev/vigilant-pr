@@ -15,8 +15,8 @@ GitHub App, just your token.
 
 ```mermaid
 flowchart LR
-    C1(["run: vigilant watch"]) --> A["You are tagged as a<br/>reviewer on a GitHub PR"]
-    C2(["run: vigilant slack-watch<br/>or vigilant teams"]) -.-> A2["Beta: you are @-mentioned in a<br/>configured Slack or Teams channel"]
+    C1(["run: vigilant github-watch"]) --> A["You are tagged as a<br/>reviewer on a GitHub PR"]
+    C2(["run: vigilant slack-watch<br/>or vigilant teams-watch"]) -.-> A2["Beta: you are @-mentioned in a<br/>configured Slack or Teams channel"]
     A --> B["Vigilant PR reads<br/>the PR and diff"]
     A2 -.-> B
     B --> C["Adversarial review,<br/>severity-tagged findings"]
@@ -87,7 +87,7 @@ From zero to auto-reviewing PRs as you, in three commands:
 ```bash
 pipx install git+https://github.com/tllongdev/vigilant-pr@v1.0.0
 vigilant init      # checks GitHub auth, picks a model (free options first), writes .env
-vigilant watch     # auto-reviews any open PR where you're a requested reviewer
+vigilant github-watch   # auto-reviews any open PR where you're a requested reviewer
 ```
 
 `vigilant init` walks you through everything: it confirms `gh` is authenticated
@@ -176,20 +176,21 @@ the provider exposes a list endpoint, the exact model ids you can use).
 
 ## Watcher (daemon mode)
 
-`vigilant watch` polls GitHub for open PRs where **you** are a requested reviewer
-and auto-reviews them on your behalf. It is idempotent (never re-reviews the same
-head SHA), bounded (poll interval + per-day cap), and resilient (a failure on one
-PR never crashes the loop). No GitHub App, no webhooks - just your token.
+`vigilant github-watch` polls GitHub for open PRs where **you** are a requested
+reviewer and auto-reviews them on your behalf. It is idempotent (never re-reviews
+the same head SHA), bounded (poll interval + per-day cap), and resilient (a
+failure on one PR never crashes the loop). No GitHub App, no webhooks - just your
+token. (The old name `vigilant watch` still works as an alias.)
 
 ```bash
 # Run continuously (default: poll every 120s, cap 50 reviews/UTC-day)
-vigilant watch
+vigilant github-watch
 
 # One pass and exit - ideal for cron
-vigilant watch --once
+vigilant github-watch --once
 
 # Tune cadence and cap
-vigilant watch --poll-interval 300 --daily-cap 20
+vigilant github-watch --poll-interval 300 --daily-cap 20
 ```
 
 ### Scoping which repos it touches
@@ -216,7 +217,7 @@ docker run -d --name vigilant-pr --restart unless-stopped \
   -e VIGILANT_ORG_ALLOW="acme" \
   -v vigilant-state:/root/.vigilant \
   -e VIGILANT_SEEN_PATH=/root/.vigilant/seen.json \
-  ghcr.io/tllongdev/vigilant-pr:latest watch
+  ghcr.io/tllongdev/vigilant-pr:latest github-watch
 ```
 
 ### Token scopes
@@ -229,9 +230,9 @@ The watcher uses only your token. It needs:
 
 ## Slack watch (beta, no app)
 
-> **Beta.** The GitHub `review`/`watch` flow above is the stable core. `slack-watch`
-> works with no Slack app, but it depends on your Slack session token, so validate
-> it in your own workspace before relying on it.
+> **Beta.** The GitHub `review`/`github-watch` flow above is the stable core.
+> `slack-watch` works with no Slack app, but it depends on your Slack session
+> token, so validate it in your own workspace before relying on it.
 
 `vigilant slack-watch` polls a Slack channel and reviews any PR you're
 **@-mentioned** on - whether the mention is a top-level message or a reply
@@ -291,12 +292,12 @@ docker run -d --name vigilant-slack-watch --restart unless-stopped \
   ghcr.io/tllongdev/vigilant-pr:latest slack-watch
 ```
 
-## Teams trigger (beta)
+## Teams watch (beta)
 
-`vigilant teams` serves a Microsoft Teams **Outgoing Webhook** endpoint. Teams
-has no Socket-Mode equivalent, so this surface needs an inbound HTTPS URL (put it
-behind your reverse proxy or a tunnel). It is dependency-free (stdlib HMAC +
-HTTP).
+`vigilant teams-watch` serves a Microsoft Teams **Outgoing Webhook** endpoint.
+Teams has no Socket-Mode equivalent, so this surface needs an inbound HTTPS URL
+(put it behind your reverse proxy or a tunnel). It is dependency-free (stdlib
+HMAC + HTTP). (The old name `vigilant teams` still works as an alias.)
 
 Because a review outlasts Teams' ~5s response budget, the webhook acks
 immediately and posts the result to a Teams **Incoming Webhook**
@@ -306,7 +307,7 @@ immediately and posts the result to a Teams **Incoming Webhook**
 export TEAMS_HMAC_SECRET="<base64 secret Teams shows on webhook creation>"
 export TEAMS_INCOMING_WEBHOOK_URL="https://outlook.office.com/webhook/..."  # optional
 export ANTHROPIC_API_KEY="sk-ant-..." GH_TOKEN="ghp_..."
-vigilant teams --port 8080
+vigilant teams-watch --port 8080
 ```
 
 Then @-mention the outgoing webhook with a PR link in a channel.

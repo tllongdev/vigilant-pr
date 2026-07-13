@@ -3,17 +3,17 @@
     vigilant init                       # first-run setup wizard (writes .env)
     vigilant review <pr-url-or-number> [--repo owner/repo] [--model P/M|--opus|--sonnet] [--dry-run]
     vigilant threads <pr-url-or-number> [--repo owner/repo] [--dry-run]
-    vigilant watch [--once] [--poll-interval N] [--daily-cap N]
+    vigilant github-watch [--once] [--poll-interval N] [--daily-cap N]
     vigilant slack-watch --channel C0123 [--poll-interval N] [--once] [--no-reply]
-    vigilant teams [--host H] [--port P] # Microsoft Teams webhook (beta)
+    vigilant teams-watch [--host H] [--port P] # Microsoft Teams webhook (beta)
     vigilant models                     # list models your credentials can reach
 
-`watch` polls for PRs where you are a requested reviewer. `slack-watch` polls a
-Slack channel (no app/admin approval) and reviews PRs you're @-mentioned on;
-`teams` reviews PRs on request from chat. All surfaces post on behalf of your
-GitHub token, and run against any model (Claude, or free tiers like
-Groq/Gemini/NVIDIA, or a local model) via a `provider/model` string - see
-`vigilant models`.
+`github-watch` polls for PRs where you are a requested reviewer. `slack-watch`
+polls a Slack channel (no app/admin approval) and reviews PRs you're @-mentioned
+on; `teams-watch` reviews PRs on request from a Teams channel. All surfaces post
+on behalf of your GitHub token, and run against any model (Claude, or free tiers
+like Groq/Gemini/NVIDIA, or a local model) via a `provider/model` string - see
+`vigilant models`. (`watch` and `teams` remain as hidden back-compat aliases.)
 """
 
 from __future__ import annotations
@@ -40,7 +40,11 @@ from .engine import (
 )
 
 # Commands that touch GitHub and therefore need `gh`/GH_TOKEN available.
-_GITHUB_COMMANDS = {"review", "threads", "watch", "slack-watch", "teams"}
+_GITHUB_COMMANDS = {"review", "threads", "github-watch", "slack-watch", "teams-watch"}
+
+# Old command names kept working as hidden aliases; normalized after parsing so
+# the dispatch and _GITHUB_COMMANDS only deal in canonical names.
+_COMMAND_ALIASES = {"watch": "github-watch", "teams": "teams-watch"}
 
 
 def _resolve_model(args: argparse.Namespace) -> str | None:
@@ -114,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
             "Defaults to Sonnet 5; pass --opus for Opus 4.8 on hard PRs."
         ),
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="<command>")
 
     review_p = subparsers.add_parser("review", help="Review a PR and post as you.")
     _add_common_flags(review_p)
@@ -125,8 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     _add_common_flags(threads_p)
 
     watch_p = subparsers.add_parser(
-        "watch",
-        help="Daemon: auto-review PRs where you are requested as a reviewer.",
+        "github-watch",
+        aliases=["watch"],
+        help="Daemon: auto-review GitHub PRs where you are requested as a reviewer.",
     )
     watch_p.add_argument(
         "--once", action="store_true", help="Run a single poll pass and exit (cron/testing)."
@@ -160,8 +165,9 @@ def main(argv: list[str] | None = None) -> int:
     _add_model_flags(slack_watch_p)
 
     teams_p = subparsers.add_parser(
-        "teams",
-        help="Daemon (beta): serve a Microsoft Teams outgoing-webhook endpoint.",
+        "teams-watch",
+        aliases=["teams"],
+        help="Daemon (beta): watch a Microsoft Teams channel via an outgoing-webhook endpoint.",
     )
     teams_p.add_argument("--host", default="0.0.0.0", help="Bind host (default 0.0.0.0).")
     teams_p.add_argument("--port", type=int, default=8080, help="Bind port (default 8080).")
@@ -178,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    args.command = _COMMAND_ALIASES.get(args.command, args.command)
     if args.command == "models":
         return run_models(Config.from_env())
     if args.command == "init":
@@ -205,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_review(args.pr, config)
     if args.command == "threads":
         return run_threads_only(args.pr, config)
-    if args.command == "watch":
+    if args.command == "github-watch":
         return run_watch(config, once=args.once)
     if args.command == "slack-watch":
         from .triggers.slack_poll import run_slack_watch
@@ -218,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
             reply=not args.no_reply,
             auto_token=args.auto_token,
         )
-    if args.command == "teams":
+    if args.command == "teams-watch":
         from .triggers.teams import run_teams
 
         return run_teams(config, host=args.host, port=args.port)

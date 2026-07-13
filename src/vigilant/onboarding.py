@@ -208,7 +208,7 @@ def run_init(env_path: str = ".env") -> int:
     upsert_env_file(env_path, updates)
     print(f"\nWrote {len(updates)} setting(s) to {env_path}. You're ready:")
     print("  vigilant review https://github.com/owner/repo/pull/123")
-    print("  vigilant watch                 # auto-review PRs you're requested on")
+    print("  vigilant github-watch          # auto-review PRs you're requested on")
     if "VIGILANT_SLACK_CHANNELS" in updates:
         auto = " --auto-token" if updates.get("VIGILANT_SLACK_AUTO_TOKEN") else ""
         print(f"  vigilant slack-watch{auto}      # review PRs you're @-mentioned on in Slack")

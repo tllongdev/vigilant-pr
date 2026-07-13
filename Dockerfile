@@ -1,5 +1,5 @@
 # Vigilant PR - single image that serves every subcommand: `review` (one-shot),
-# `watch` (daemon), `slack-watch`, and `teams`. Bundles Python 3.12 + the GitHub
+# `github-watch` (daemon), `slack-watch`, and `teams-watch`. Bundles Python 3.12 + the GitHub
 # CLI so the only inputs a user supplies at runtime are a model provider key and
 # a GitHub token (GH_TOKEN), or a mounted `gh` config. No secrets are baked in.
 FROM python:3.12-slim
