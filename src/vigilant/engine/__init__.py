@@ -13,6 +13,7 @@ from .providers import (
     PROVIDERS,
     auto_select_model,
     list_models,
+    model_key_missing,
     provider_api_key,
     resolve_provider,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "github_preflight",
     "list_models",
     "load_dotenv",
+    "model_key_missing",
     "provider_api_key",
     "resolve_handle",
     "resolve_provider",

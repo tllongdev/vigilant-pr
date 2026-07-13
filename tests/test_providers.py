@@ -83,6 +83,27 @@ def test_auto_select_model_none_when_no_keys(monkeypatch: pytest.MonkeyPatch) ->
     assert providers.auto_select_model() is None
 
 
+def test_model_key_missing_none_for_mock() -> None:
+    assert providers.model_key_missing(Config(model="mock")) is None
+
+
+def test_model_key_missing_none_for_keyless_ollama() -> None:
+    assert providers.model_key_missing(Config(model="ollama/qwen2.5:14b")) is None
+
+
+def test_model_key_missing_none_when_key_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_all_keys(monkeypatch)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_x")
+    assert providers.model_key_missing(Config(model="groq/llama-3.3-70b-versatile")) is None
+
+
+def test_model_key_missing_message_when_key_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_all_keys(monkeypatch)
+    msg = providers.model_key_missing(Config(model="groq/llama-3.3-70b-versatile"))
+    assert msg is not None
+    assert "GROQ_API_KEY" in msg
+
+
 def test_base_url_override_wins() -> None:
     cfg = Config(api_base="http://localhost:1234/v1")
     assert providers.base_url("ollama", cfg) == "http://localhost:1234/v1"

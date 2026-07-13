@@ -83,6 +83,22 @@ RECOMMENDED_MODELS = {
 _AUTO_ORDER = ("anthropic", "openai", "groq", "gemini", "nvidia_nim", "openrouter")
 
 
+def model_key_missing(config: Config) -> str | None:
+    """Return an actionable message if the configured model's provider key is
+    missing, else None.
+
+    Keyless providers (mock, ollama) always pass. This is the single guard used
+    by every entry point (review, watch, slack, teams) so none of them can drift
+    back to an Anthropic-only assumption.
+    """
+    provider, _ = resolve_provider(config.model)
+    if provider in ("mock", "ollama"):
+        return None
+    if provider_api_key(provider):
+        return None
+    return missing_key_message(provider)
+
+
 def auto_select_model() -> str | None:
     """Pick a model string from whichever provider key is present.
 

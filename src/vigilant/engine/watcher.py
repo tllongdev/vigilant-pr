@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .config import Config
-from .providers import missing_key_message, provider_api_key, resolve_provider
+from .providers import model_key_missing
 from .review import fetch_last_bot_review_sha, run_review
 from .util import run
 
@@ -136,9 +136,9 @@ def run_watch(config: Config, once: bool = False, seen_path: str | Path | None =
 
     `once=True` runs a single pass and returns (useful for cron or testing).
     """
-    provider, _ = resolve_provider(config.model)
-    if provider not in ("mock", "ollama") and not provider_api_key(provider):
-        sys.stderr.write(missing_key_message(provider) + "\n")
+    key_problem = model_key_missing(config)
+    if key_problem:
+        sys.stderr.write(key_problem + "\n")
         return 1
 
     day = datetime.now(UTC).date()

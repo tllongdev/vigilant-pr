@@ -26,7 +26,7 @@ from .identity import (
     resolve_handle,
     signature_index,
 )
-from .providers import call_model, missing_key_message, provider_api_key, resolve_provider
+from .providers import call_model, model_key_missing
 from .util import run
 
 # On a re-review, only these severities are posted. Nits are suppressed so re-runs
@@ -676,9 +676,9 @@ def post_failure_comment(repo: str, pr_number: int, reason: str, model: str) -> 
 
 def run_threads_only(target: str, config: Config) -> int:
     """Lightweight mode: validate human replies to prior AI comments only."""
-    provider, _ = resolve_provider(config.model)
-    if provider not in ("mock", "ollama") and not provider_api_key(provider):
-        sys.stderr.write(missing_key_message(provider) + "\n")
+    key_problem = model_key_missing(config)
+    if key_problem:
+        sys.stderr.write(key_problem + "\n")
         return 1
 
     pr_number, url_repo = parse_pr_arg(target)
@@ -747,9 +747,9 @@ def run_review(target: str, config: Config) -> int:
     model = config.model
     profile = MODEL_PROFILES.get(model, GENERIC_PROFILE)
 
-    provider, _ = resolve_provider(model)
-    if provider not in ("mock", "ollama") and not provider_api_key(provider):
-        sys.stderr.write(missing_key_message(provider) + "\n")
+    key_problem = model_key_missing(config)
+    if key_problem:
+        sys.stderr.write(key_problem + "\n")
         return 1
 
     pr_number, url_repo = parse_pr_arg(target)

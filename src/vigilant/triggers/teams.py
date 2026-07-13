@@ -28,7 +28,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-from ..engine import Config
+from ..engine import Config, model_key_missing
 from .core import format_reply, review_from_text
 
 
@@ -114,8 +114,9 @@ def run_teams(config: Config, host: str = "0.0.0.0", port: int = 8080) -> int:
             "Teams outgoing webhook. See the README Teams section.\n"
         )
         return 1
-    if not config.anthropic_api_key:
-        sys.stderr.write("ANTHROPIC_API_KEY not set; reviews cannot run.\n")
+    key_problem = model_key_missing(config)
+    if key_problem:
+        sys.stderr.write(key_problem + "\n")
         return 1
 
     result_webhook = os.environ.get("TEAMS_INCOMING_WEBHOOK_URL")
