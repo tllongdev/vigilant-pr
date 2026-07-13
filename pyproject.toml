@@ -16,6 +16,10 @@ dependencies = []
 # stdlib-only, so `slack` is the only third-party trigger dependency.
 slack = ["slack_bolt>=1.18"]
 chat = ["slack_bolt>=1.18"]
+# Automatic Slack token extraction/refresh for `slack-watch --auto-token`.
+# Reads your logged-in Chrome Slack session; needs a one-time
+# `python -m playwright install chromium`.
+slack-refresh = ["playwright>=1.40"]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "slack_bolt>=1.18"]
 
 [project.scripts]
@@ -48,6 +52,11 @@ warn_unused_ignores = true
 # integration whose handlers are registered via slack_bolt's untyped decorators.
 [[tool.mypy.overrides]]
 module = "slack_bolt.*"
+ignore_missing_imports = true
+
+# Playwright is an optional extra (slack-refresh) and is imported lazily.
+[[tool.mypy.overrides]]
+module = "playwright.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

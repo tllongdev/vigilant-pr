@@ -1,5 +1,6 @@
 """Vigilant PR command-line interface.
 
+    vigilant init                       # first-run setup wizard (writes .env)
     vigilant review <pr-url-or-number> [--repo owner/repo] [--model P/M|--opus|--sonnet] [--dry-run]
     vigilant threads <pr-url-or-number> [--repo owner/repo] [--dry-run]
     vigilant watch [--once] [--poll-interval N] [--daily-cap N]
@@ -152,6 +153,11 @@ def main(argv: list[str] | None = None) -> int:
     slack_watch_p.add_argument(
         "--no-reply", action="store_true", help="Do not post the outcome back to Slack."
     )
+    slack_watch_p.add_argument(
+        "--auto-token", action="store_true",
+        help="Read + auto-refresh the Slack token from your Chrome session "
+             "(needs the slack-refresh extra). Otherwise set SLACK_TOKEN.",
+    )
     _add_model_flags(slack_watch_p)
 
     slack_p = subparsers.add_parser(
@@ -173,9 +179,18 @@ def main(argv: list[str] | None = None) -> int:
         help="List providers and the models your credentials can reach.",
     )
 
+    subparsers.add_parser(
+        "init",
+        help="Interactive setup: pick a model, add keys, write .env.",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "models":
         return run_models(Config.from_env())
+    if args.command == "init":
+        from .onboarding import run_init
+
+        return run_init()
 
     if args.command in _GITHUB_COMMANDS:
         gh_problem = github_preflight()
@@ -208,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
             poll_interval=args.poll_interval,
             once=args.once,
             reply=not args.no_reply,
+            auto_token=args.auto_token,
         )
     if args.command == "slack":
         from .triggers.slack import run_slack

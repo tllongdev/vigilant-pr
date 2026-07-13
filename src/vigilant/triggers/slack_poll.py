@@ -25,10 +25,15 @@ from __future__ import annotations
 import os
 import sys
 import time
+from collections.abc import Callable
+from typing import TypeVar
 
 from ..engine import Config, model_key_missing
 from .core import extract_pr_refs, format_reply, review_from_text
-from .slack_client import SlackClient, SlackError
+from .slack_auth import TokenSource, build_token_source
+from .slack_client import AUTH_ERROR_CODES, SlackClient, SlackError
+
+T = TypeVar("T")
 
 
 def message_triggers(text: str, mention_token: str) -> list[str]:
@@ -58,22 +63,17 @@ def run_slack_watch(
     poll_interval: int = 60,
     once: bool = False,
     reply: bool = True,
+    auto_token: bool = False,
 ) -> int:
     """Poll Slack channel(s) and review PRs you're @-mentioned on.
 
-    Returns a process exit code (0 on clean shutdown, 1 on config error).
+    Returns a process exit code (0 on clean shutdown, 1 on config error). When
+    the token comes from ``--auto-token`` (the browser session), an expired
+    token is transparently re-extracted and the failed call retried.
     """
     key_problem = model_key_missing(config)
     if key_problem:
         sys.stderr.write(key_problem + "\n")
-        return 1
-
-    token = os.environ.get("SLACK_TOKEN", "")
-    cookie_d = os.environ.get("SLACK_COOKIE_D")
-    try:
-        client = SlackClient(token, cookie_d)
-    except SlackError as e:
-        sys.stderr.write(str(e) + "\n")
         return 1
 
     watch_channels = _channels_from_env(channels)
@@ -84,11 +84,42 @@ def run_slack_watch(
         )
         return 1
 
+    try:
+        source: TokenSource = build_token_source(auto_token, probe_channel=watch_channels[0])
+        token, cookie_d = source.get()
+        client = SlackClient(token, cookie_d)
+    except SlackError as e:
+        sys.stderr.write(str(e) + "\n")
+        return 1
+
+    # A single mutable holder so a refresh can swap the client under the closures.
+    state = {"client": client}
+
+    def refresh() -> bool:
+        if not source.can_refresh:
+            return False
+        try:
+            new_token, new_cookie = source.get(force_refresh=True)
+            state["client"] = SlackClient(new_token, new_cookie)
+            sys.stderr.write("Slack token expired; re-extracted a fresh one.\n")
+            return True
+        except SlackError as e:
+            sys.stderr.write(f"Slack token refresh failed: {e}\n")
+            return False
+
+    def api(fn: Callable[[SlackClient], T]) -> T:
+        """Run a Slack call, refreshing the token once on an auth-expiry error."""
+        try:
+            return fn(state["client"])
+        except SlackError as e:
+            if e.code in AUTH_ERROR_CODES and refresh():
+                return fn(state["client"])
+            raise
+
     user_id = os.environ.get("VIGILANT_SLACK_USER_ID")
     try:
-        identity = client.auth_test()
         if not user_id:
-            user_id = str(identity.get("user_id", ""))
+            user_id = str(api(lambda c: c.auth_test()).get("user_id", ""))
     except SlackError as e:
         sys.stderr.write(f"Slack auth failed: {e}\n")
         return 1
@@ -111,7 +142,10 @@ def run_slack_watch(
     def poll_once() -> None:
         for channel in watch_channels:
             try:
-                messages = client.conversations_history(channel, oldest=last_ts[channel])
+                # lambda runs immediately inside api(); loop-var capture is safe here.
+                messages = api(
+                    lambda c: c.conversations_history(channel, oldest=last_ts[channel])  # noqa: B023
+                )
             except SlackError as e:
                 sys.stderr.write(f"[{channel}] history fetch failed: {e}\n")
                 continue
@@ -126,8 +160,9 @@ def run_slack_watch(
                 sys.stderr.write(f"[{channel}] mention + PR link at {ts}; reviewing...\n")
                 outcomes = review_from_text(str(msg.get("text", "")), config)
                 if reply and outcomes:
+                    body = format_reply(outcomes)
                     try:
-                        client.chat_post_message(channel, format_reply(outcomes), thread_ts=ts)
+                        api(lambda c: c.chat_post_message(channel, body, thread_ts=ts))  # noqa: B023
                     except SlackError as e:
                         sys.stderr.write(f"[{channel}] could not post reply: {e}\n")
 

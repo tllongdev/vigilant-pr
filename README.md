@@ -64,6 +64,25 @@ pipx install git+https://github.com/tllongdev/vigilant-pr
 uv tool install .
 ```
 
+## Quick start (`vigilant init`)
+
+New here? Run the setup wizard - it checks GitHub access, lets you pick a model
+provider (leading with free, no-credit-card options), validates the key, and
+writes a `.env` for you:
+
+```bash
+vigilant init
+```
+
+Then review a PR:
+
+```bash
+vigilant review https://github.com/owner/repo/pull/123
+```
+
+That's the whole BYO-model flow: install, `init`, review. Everything below is
+for when you want a specific model, the watcher, or Slack.
+
 ## Usage
 
 ```bash
@@ -180,16 +199,33 @@ it authenticates with a token you already have and only reads a channel you can
 already read. This is the right choice for locked-down corporate workspaces, and
 it's dependency-free (stdlib only - no `[slack]` extra needed).
 
-It works with either:
-- a browser-session token (`xoxc-...`) plus the `d` cookie (`xoxd-...`) - the
-  same tokens the ad-hoc Slack CLI uses, no app required, or
-- a bot/user OAuth token (`xoxb-` / `xoxp-`) via a Bearer header, if you have one.
+There are two app-free ways to give it a token:
+
+**Auto (recommended) - `--auto-token`.** Vigilant reads the token straight from
+your logged-in Slack session in Chrome and **automatically re-extracts it when
+Slack expires it**, so a long-running monitor never dies on an expired session.
+This needs the optional refresh extra (one-time):
+
+```bash
+pipx install 'vigilant-pr[slack-refresh]'   # or: pip install 'vigilant-pr[slack-refresh]'
+python -m playwright install chromium
+
+export GH_TOKEN="ghp_..."
+export VIGILANT_MODEL="groq/llama-3.3-70b-versatile"   # or any provider
+vigilant slack-watch --auto-token --channel C0123ABCD
+```
+
+If you belong to multiple Slack workspaces, Vigilant picks the one that can read
+your channel automatically; set `VIGILANT_SLACK_TEAM=T0123` to force one.
+
+**Static - set the token yourself.** No refresh (an `xoxc-` token expires in a
+few hours; an `xoxb-`/`xoxp-` OAuth token lasts):
 
 ```bash
 export SLACK_TOKEN="xoxc-..."               # or xoxb-/xoxp-
 export SLACK_COOKIE_D="xoxd-..."            # required only for xoxc- tokens
 export GH_TOKEN="ghp_..."
-export VIGILANT_MODEL="groq/llama-3.3-70b-versatile"   # or any provider
+export VIGILANT_MODEL="groq/llama-3.3-70b-versatile"
 vigilant slack-watch --channel C0123ABCD    # repeatable, or VIGILANT_SLACK_CHANNELS=C1,C2
 ```
 

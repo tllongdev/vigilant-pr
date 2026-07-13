@@ -24,7 +24,23 @@ _API_BASE = "https://slack.com/api"
 
 
 class SlackError(RuntimeError):
-    """Raised when the Slack API returns ``ok: false`` or the call fails."""
+    """Raised when the Slack API returns ``ok: false`` or the call fails.
+
+    ``code`` carries the Slack error string (e.g. ``invalid_auth``,
+    ``token_expired``) when the API responded, so callers can distinguish an
+    expired token (refresh + retry) from a hard failure.
+    """
+
+    def __init__(self, message: str, code: str | None = None):
+        super().__init__(message)
+        self.code = code
+
+
+# Slack error codes that mean "the token is no longer valid" - a signal to
+# refresh (re-extract) the token and retry rather than give up.
+AUTH_ERROR_CODES = frozenset(
+    {"invalid_auth", "not_authed", "token_expired", "token_revoked", "account_inactive"}
+)
 
 
 class SlackClient:
@@ -59,7 +75,8 @@ class SlackClient:
         except Exception as e:  # noqa: BLE001 - normalize transport errors
             raise SlackError(f"Slack API call {method} failed: {e}") from e
         if not payload.get("ok"):
-            raise SlackError(f"Slack API {method} returned error: {payload.get('error')}")
+            code = payload.get("error")
+            raise SlackError(f"Slack API {method} returned error: {code}", code=code)
         return payload
 
     def auth_test(self) -> dict[str, Any]:
