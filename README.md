@@ -23,9 +23,9 @@ Actions install.
 ## Status
 
 Milestones 001-005 complete: engine extraction, container + GHCR image, the
-review-request watcher daemon, the Slack trigger, and the Teams trigger (beta) +
-docs. Plus model-agnostic inference (Claude + free tiers + local models). See
-`docs/` in the planning repo.
+review-request watcher daemon, the no-app Slack monitor, and the Teams trigger
+(beta) + docs. Plus model-agnostic inference (Claude + free tiers + local
+models). See `docs/` in the planning repo.
 
 ## Requirements
 
@@ -191,13 +191,13 @@ The watcher uses only your token. It needs:
 - Repo read access sufficient for `gh search prs --review-requested=@me` to see
   the PRs you are tagged on.
 
-## Slack watch (no app, recommended)
+## Slack watch (no app)
 
 `vigilant slack-watch` polls a Slack channel and reviews any PR you're
-**@-mentioned** on. It needs **no Slack app and no workspace-admin approval** -
-it authenticates with a token you already have and only reads a channel you can
-already read. This is the right choice for locked-down corporate workspaces, and
-it's dependency-free (stdlib only - no `[slack]` extra needed).
+**@-mentioned** on - whether the mention is a top-level message or a reply
+inside a thread. It needs **no Slack app and no workspace-admin approval** - it
+authenticates with a token you already have and only reads a channel you can
+already read. It's dependency-free (stdlib only).
 
 There are two app-free ways to give it a token:
 
@@ -241,49 +241,6 @@ docker run -d --name vigilant-slack-watch --restart unless-stopped \
   -e GH_TOKEN -e GROQ_API_KEY -e VIGILANT_MODEL \
   -e SLACK_TOKEN -e SLACK_COOKIE_D -e VIGILANT_SLACK_CHANNELS \
   ghcr.io/tllongdev/vigilant-pr:latest slack-watch
-```
-
-## Slack trigger (Socket Mode - requires a Slack app)
-
-`vigilant slack` runs a Slack listener that reviews a PR when you ask it to in
-chat. It uses **Socket Mode** (an outbound WebSocket), so like the watcher it
-needs no inbound ports - but it **does** require creating and installing a Slack
-app, which usually needs workspace-admin approval. If that's a blocker, use
-`slack-watch` above instead. Install the Slack extra (`pipx install
-'vigilant-pr[slack]'`) or use the container image, which bundles it.
-
-Three ways to trigger a review:
-- Slash command: `/review https://github.com/owner/repo/pull/123` (add `--opus`
-  for the hard-PR tier).
-- @-mention the app in a message that contains a PR link.
-- React to any message containing a PR link with a trigger emoji (default
-  :eyes:; configurable via `VIGILANT_TRIGGER_EMOJIS`).
-
-Every review still posts on GitHub as **your** identity (the process's GitHub
-token). Because of that, restrict who may trigger it:
-
-```bash
-export SLACK_BOT_TOKEN="xoxb-..."          # bot token
-export SLACK_APP_TOKEN="xapp-..."          # app-level token (connections:write)
-export SLACK_ALLOWED_USERS="U012ABCDEF"    # Slack user IDs allowed to trigger
-export ANTHROPIC_API_KEY="sk-ant-..."
-export GH_TOKEN="ghp_..."
-vigilant slack
-```
-
-If `SLACK_ALLOWED_USERS` is unset the listener starts but warns loudly - anyone
-in the workspace could otherwise post reviews under your GitHub identity.
-
-Slack app setup (once): create an app, enable **Socket Mode**, add bot scopes
-`chat:write`, `app_mentions:read`, `commands`, `reactions:read`,
-`channels:history`; add the `/review` slash command; subscribe to the
-`app_mention` and `reaction_added` events; install to your workspace.
-
-```bash
-docker run -d --name vigilant-slack --restart unless-stopped \
-  -e ANTHROPIC_API_KEY -e GH_TOKEN \
-  -e SLACK_BOT_TOKEN -e SLACK_APP_TOKEN -e SLACK_ALLOWED_USERS \
-  ghcr.io/tllongdev/vigilant-pr:latest slack
 ```
 
 ## Teams trigger (beta)

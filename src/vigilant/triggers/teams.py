@@ -1,10 +1,10 @@
 """Microsoft Teams trigger (optional / beta) - milestone 005.
 
-Teams has no Socket-Mode equivalent, so this uses the standard no-App path: a
-Teams *Outgoing Webhook*. When you @-mention the webhook in a channel, Teams
-POSTs an HMAC-signed Bot Framework activity to this server. Unlike the poll-based
-watcher and Slack Socket Mode, this surface needs an inbound HTTPS endpoint
-(expose it via your own reverse proxy or a tunnel).
+This uses Teams' no-App path: an *Outgoing Webhook*. When you @-mention the
+webhook in a channel, Teams POSTs an HMAC-signed Bot Framework activity to this
+server. Unlike the poll-based Slack monitor and the GitHub watcher, this surface
+needs an inbound HTTPS endpoint (expose it via your own reverse proxy or a
+tunnel).
 
 Because a review takes longer than Teams' ~5s response budget, we ack the POST
 immediately and, when the review finishes, post the result to a Teams *Incoming

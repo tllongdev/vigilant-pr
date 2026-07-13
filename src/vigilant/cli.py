@@ -5,14 +5,13 @@
     vigilant threads <pr-url-or-number> [--repo owner/repo] [--dry-run]
     vigilant watch [--once] [--poll-interval N] [--daily-cap N]
     vigilant slack-watch --channel C0123 [--poll-interval N] [--once] [--no-reply]
-    vigilant slack                      # Slack Socket Mode listener (needs an app)
     vigilant teams [--host H] [--port P] # Microsoft Teams webhook (beta)
     vigilant models                     # list models your credentials can reach
 
 `watch` polls for PRs where you are a requested reviewer. `slack-watch` polls a
 Slack channel (no app/admin approval) and reviews PRs you're @-mentioned on;
-`slack`/`teams` review PRs on request from chat. All surfaces post on behalf of
-your GitHub token, and run against any model (Claude, or free tiers like
+`teams` reviews PRs on request from chat. All surfaces post on behalf of your
+GitHub token, and run against any model (Claude, or free tiers like
 Groq/Gemini/NVIDIA, or a local model) via a `provider/model` string - see
 `vigilant models`.
 """
@@ -41,7 +40,7 @@ from .engine import (
 )
 
 # Commands that touch GitHub and therefore need `gh`/GH_TOKEN available.
-_GITHUB_COMMANDS = {"review", "threads", "watch", "slack-watch", "slack", "teams"}
+_GITHUB_COMMANDS = {"review", "threads", "watch", "slack-watch", "teams"}
 
 
 def _resolve_model(args: argparse.Namespace) -> str | None:
@@ -160,12 +159,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_model_flags(slack_watch_p)
 
-    slack_p = subparsers.add_parser(
-        "slack",
-        help="Daemon: listen on Slack (Socket Mode) and review PRs on request.",
-    )
-    _add_model_flags(slack_p)
-
     teams_p = subparsers.add_parser(
         "teams",
         help="Daemon (beta): serve a Microsoft Teams outgoing-webhook endpoint.",
@@ -225,10 +218,6 @@ def main(argv: list[str] | None = None) -> int:
             reply=not args.no_reply,
             auto_token=args.auto_token,
         )
-    if args.command == "slack":
-        from .triggers.slack import run_slack
-
-        return run_slack(config)
     if args.command == "teams":
         from .triggers.teams import run_teams
 

@@ -20,10 +20,6 @@ from dataclasses import dataclass
 
 from ..engine import OPUS_MODEL, SONNET_MODEL, Config, run_review
 
-# Default reaction emojis (Slack "reacji" names, no colons) that trigger a review
-# when added to a message containing a PR link.
-DEFAULT_TRIGGER_EMOJIS = ("eyes", "vigilant", "mag", "shipit")
-
 # Full GitHub PR URL. Kept strict (numeric PR id) so we don't misfire on
 # /pull/ tree paths or issue links.
 _PR_URL_RE = re.compile(r"https?://github\.com/([^/\s|>]+/[^/\s|>]+)/pull/(\d+)")

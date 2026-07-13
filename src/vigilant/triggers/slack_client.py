@@ -94,6 +94,21 @@ class SlackClient:
         messages = payload.get("messages", [])
         return messages if isinstance(messages, list) else []
 
+    def conversations_replies(
+        self, channel: str, ts: str, oldest: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Return messages in a thread (the parent ``ts`` plus its replies).
+
+        ``conversations.history`` only returns top-level channel messages, so
+        this is how we see @-mentions posted as replies inside a thread.
+        """
+        payload = self._call(
+            "conversations.replies",
+            {"channel": channel, "ts": ts, "oldest": oldest, "limit": limit},
+        )
+        messages = payload.get("messages", [])
+        return messages if isinstance(messages, list) else []
+
     def chat_post_message(
         self, channel: str, text: str, thread_ts: str | None = None
     ) -> None:

@@ -1,14 +1,12 @@
-"""Chat trigger surfaces for Vigilant PR (milestones 004-005).
+"""Chat trigger surfaces for Vigilant PR.
 
-These map a chat request ("review this PR") to `engine.run_review`, which posts
+These map a review request ("review this PR") to `engine.run_review`, which posts
 the review on behalf of the user who owns the running GitHub token. The shared,
-dependency-free logic lives in `core`; each surface (`slack`, `teams`) is a thin
-adapter and imports its own optional third-party SDK lazily so the core engine
-stays stdlib-only.
+dependency-free logic lives in `core`; the Slack monitor (`slack_poll`) and Teams
+webhook (`teams`) are thin, stdlib-only adapters on top of it.
 """
 
 from .core import (
-    DEFAULT_TRIGGER_EMOJIS,
     ReviewOutcome,
     extract_pr_refs,
     format_reply,
@@ -18,7 +16,6 @@ from .core import (
 )
 
 __all__ = [
-    "DEFAULT_TRIGGER_EMOJIS",
     "ReviewOutcome",
     "extract_pr_refs",
     "format_reply",
