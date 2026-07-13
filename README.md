@@ -236,6 +236,14 @@ pass `--no-reply` to stay silent. Your Slack user id is auto-detected from the
 token via `auth.test`; override with `VIGILANT_SLACK_USER_ID`. Find a channel ID
 from the channel's "View channel details" footer, or the `/archives/C…` URL.
 
+It also **persists progress** to `~/.config/vigilant-pr/slack_watch/` (override
+with `VIGILANT_SLACK_STATE_DIR`), so a restart resumes where it left off: it
+reviews anything that arrived while it was down, and won't re-review or lose
+track of threads. At startup it seeds tracked threads from the last week of
+history, so it catches @-mentions in replies to recently-active threads, not
+just brand-new ones. (Residual edge: a reply to a thread with no activity in the
+last ~7 days won't be tracked.)
+
 ```bash
 docker run -d --name vigilant-slack-watch --restart unless-stopped \
   -e GH_TOKEN -e GROQ_API_KEY -e VIGILANT_MODEL \

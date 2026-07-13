@@ -9,9 +9,13 @@ contains a GitHub PR link, Vigilant reviews the PR as your GitHub identity and
 
 Mentions are caught whether they're **top-level messages or replies inside a
 thread**: each poll reads ``conversations.history`` for new top-level messages
-and ``conversations.replies`` for new replies in the threads it is tracking
-(seeded from recent history at startup, and grown as new threads appear). Only
-activity after startup is acted on; nothing is backfilled.
+and ``conversations.replies`` for new replies in the threads it is tracking. At
+startup it seeds tracked threads from the last week of history (paginated), so
+replies to already-existing threads are covered, not just brand-new ones.
+
+Progress is **persisted to disk** (per channel-set), so a restart resumes where
+it left off - it reviews anything that arrived while it was down and does not
+re-open the tracking window or re-review messages it already handled.
 
 This never installs anything into the workspace and never opens an inbound
 socket - it just reads a channel you can already read.
@@ -22,14 +26,18 @@ Config comes from the environment:
   VIGILANT_SLACK_CHANNELS   comma-separated channel IDs (e.g. C0123,C0456)
   VIGILANT_SLACK_USER_ID    your Slack user id to watch for mentions of
                             (defaults to the token's own user via auth.test)
+  VIGILANT_SLACK_STATE_DIR  where to persist watch state (default ~/.config/vigilant-pr)
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sys
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, TypeVar
 
 from ..engine import Config, model_key_missing
@@ -40,9 +48,15 @@ from .slack_client import AUTH_ERROR_CODES, SlackClient, SlackError
 T = TypeVar("T")
 
 # Bound the reply-polling cost: forget threads older than this, and never track
-# more than this many per channel (keeping the most recent).
-MAX_THREAD_AGE_SECONDS = 2 * 86400
-MAX_WATCHED_THREADS_PER_CHANNEL = 50
+# more than this many per channel (keeping the most recent). One week comfortably
+# covers "someone revived last week's PR thread to ping me" without unbounded growth.
+MAX_THREAD_AGE_SECONDS = 7 * 86400
+MAX_WATCHED_THREADS_PER_CHANNEL = 200
+# Startup seed / downtime catch-up: how far back to look and how many pages to pull.
+SEED_LOOKBACK_SECONDS = 7 * 86400
+HISTORY_PAGE_LIMIT = 200
+HISTORY_MAX_PAGES = 8
+STATE_VERSION = 1
 
 
 def message_triggers(text: str, mention_token: str) -> list[str]:
@@ -64,6 +78,45 @@ def _channels_from_env(explicit: list[str] | None) -> list[str]:
         return explicit
     raw = os.environ.get("VIGILANT_SLACK_CHANNELS", "")
     return [c.strip() for c in raw.split(",") if c.strip()]
+
+
+def _ts_float(ts: str) -> float:
+    try:
+        return float(ts)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _state_dir() -> Path:
+    override = os.environ.get("VIGILANT_SLACK_STATE_DIR")
+    if override:
+        return Path(override)
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(Path.home(), ".config")
+    return Path(base) / "vigilant-pr" / "slack_watch"
+
+
+def _state_file(channels: list[str], user_id: str) -> Path:
+    """A stable per-(user, channel-set) state file so distinct monitors don't clash."""
+    key = user_id + "|" + ",".join(sorted(channels))
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    return _state_dir() / f"{digest}.json"
+
+
+def _load_state(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_state(path: Path, data: dict[str, Any]) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2))
+        path.chmod(0o600)
+    except OSError as e:
+        sys.stderr.write(f"Could not persist Slack watch state: {e}\n")
 
 
 def run_slack_watch(
@@ -139,15 +192,31 @@ def run_slack_watch(
         return 1
 
     mention_token = f"<@{user_id}>"
-    # Only act on messages posted after startup; never backfill channel history.
-    start_ts = f"{time.time():.6f}"
-    last_ts: dict[str, str] = dict.fromkeys(watch_channels, start_ts)
-    # Per-channel set of thread parent ts we scan for new replies, plus the
-    # newest reply ts already handled in each. A ts we've already reviewed is
-    # remembered so a message can't be actioned twice across the two paths.
-    known_threads: dict[str, set[str]] = {ch: set() for ch in watch_channels}
+    now_ts = f"{time.time():.6f}"
+
+    # Restore persisted progress so a restart resumes rather than re-baselining.
+    state_path = _state_file(watch_channels, user_id)
+    saved = _load_state(state_path)
+    saved_last: dict[str, Any] = saved.get("last_ts", {}) if saved.get("user_id") == user_id else {}
+    saved_threads: dict[str, Any] = saved.get("threads", {}) if saved.get("user_id") == user_id else {}
+    saved_reviewed = saved.get("reviewed", []) if saved.get("user_id") == user_id else []
+
+    reviewed_cutoff = time.time() - MAX_THREAD_AGE_SECONDS
+    reviewed: set[str] = {t for t in saved_reviewed if _ts_float(str(t)) >= reviewed_cutoff}
+
+    # Per channel: where reviewing resumes (last_ts), the baseline before which we
+    # never review, tracked thread parents, and each thread's processed-reply cursor.
+    last_ts: dict[str, str] = {}
+    baseline_ts: dict[str, str] = {}
+    known_threads: dict[str, set[str]] = {}
     thread_cursor: dict[tuple[str, str], str] = {}
-    reviewed: set[str] = set()
+    for ch in watch_channels:
+        base = str(saved_last.get(ch) or now_ts)
+        last_ts[ch] = base
+        baseline_ts[ch] = base
+        known_threads[ch] = set(saved_threads.get(ch, {}).keys())
+        for tt, cur in saved_threads.get(ch, {}).items():
+            thread_cursor[(ch, str(tt))] = str(cur)
 
     def track_thread(channel: str, msg: dict[str, Any]) -> None:
         """Watch the thread a message belongs to for future replies."""
@@ -155,10 +224,9 @@ def run_slack_watch(
         thread_ts = str(msg.get("thread_ts", ts) or ts)
         if not thread_ts:
             return
-        if thread_ts not in known_threads[channel]:
-            known_threads[channel].add(thread_ts)
-            # Only replies after startup (or after the parent, if newer) count.
-            thread_cursor[(channel, thread_ts)] = max(thread_ts, start_ts)
+        known_threads[channel].add(thread_ts)
+        # Only replies after our baseline (or after the parent, if newer) count.
+        thread_cursor.setdefault((channel, thread_ts), max(thread_ts, baseline_ts[channel]))
 
     def prune_threads(channel: str, now: float) -> None:
         cutoff = now - MAX_THREAD_AGE_SECONDS
@@ -168,6 +236,18 @@ def run_slack_watch(
         for t in known_threads[channel] - keep:
             thread_cursor.pop((channel, t), None)
         known_threads[channel] = keep
+
+    def history_since(channel: str, oldest: str) -> list[dict[str, Any]]:
+        """All channel messages since ``oldest``, paginated and bounded."""
+        collected: list[dict[str, Any]] = []
+        cursor: str | None = None
+        for _ in range(HISTORY_MAX_PAGES):
+            # lambda runs immediately inside api(); capturing `channel`/`cursor` is safe here.
+            page, cursor = api(lambda c: c.conversations_history_page(channel, oldest=oldest, cursor=cursor, limit=HISTORY_PAGE_LIMIT))  # noqa: B023
+            collected.extend(page)
+            if not cursor:
+                break
+        return collected
 
     def maybe_review(channel: str, text: str, root_ts: str, msg_ts: str) -> None:
         """Review + reply if the message mentions us and links a PR (once per ts)."""
@@ -183,18 +263,36 @@ def run_slack_watch(
             except SlackError as e:
                 sys.stderr.write(f"[{channel}] could not post reply: {e}\n")
 
-    # Seed tracked threads from recent history so replies to threads that already
-    # exist at startup are still caught (without reviewing any pre-startup message).
+    def persist() -> None:
+        cut = time.time() - MAX_THREAD_AGE_SECONDS
+        threads_out = {
+            ch: {tt: thread_cursor[(ch, tt)] for tt in known_threads[ch] if (ch, tt) in thread_cursor}
+            for ch in watch_channels
+        }
+        _save_state(state_path, {
+            "version": STATE_VERSION,
+            "user_id": user_id,
+            "last_ts": last_ts,
+            "threads": threads_out,
+            "reviewed": sorted(t for t in reviewed if _ts_float(t) >= cut),
+        })
+
+    # Seed tracked threads from the last week of history so replies to threads
+    # that already exist at startup are caught. This only *tracks* threads; it
+    # never reviews a pre-baseline message (maybe_review is gated by baseline via
+    # the poll/reply cursors below, not called here).
+    seed_oldest = f"{time.time() - SEED_LOOKBACK_SECONDS:.6f}"
     for channel in watch_channels:
         try:
-            for msg in api(lambda c: c.conversations_history(channel, limit=50)):  # noqa: B023
+            for msg in history_since(channel, seed_oldest):
                 track_thread(channel, msg)
         except SlackError as e:
             sys.stderr.write(f"[{channel}] seed fetch failed: {e}\n")
 
+    resumed = " (resumed)" if saved.get("user_id") == user_id else ""
     sys.stderr.write(
         f"Vigilant PR watching Slack for @{user_id} in "
-        f"{', '.join(watch_channels)} (every {poll_interval}s, threads included). "
+        f"{', '.join(watch_channels)} (every {poll_interval}s, threads included){resumed}. "
         "Ctrl-C to stop.\n"
     )
 
@@ -202,10 +300,7 @@ def run_slack_watch(
         now = time.time()
         for channel in watch_channels:
             try:
-                # lambda runs immediately inside api(); loop-var capture is safe here.
-                messages = api(
-                    lambda c: c.conversations_history(channel, oldest=last_ts[channel])  # noqa: B023
-                )
+                messages = history_since(channel, last_ts[channel])
             except SlackError as e:
                 sys.stderr.write(f"[{channel}] history fetch failed: {e}\n")
                 continue
@@ -220,7 +315,7 @@ def run_slack_watch(
 
             prune_threads(channel, now)
             for thread_ts in sorted(known_threads[channel]):
-                cursor = thread_cursor.get((channel, thread_ts), start_ts)
+                cursor = thread_cursor.get((channel, thread_ts), baseline_ts[channel])
                 try:
                     replies = api(
                         lambda c: c.conversations_replies(channel, thread_ts, oldest=cursor)  # noqa: B023
@@ -236,6 +331,7 @@ def run_slack_watch(
                     if r_ts == thread_ts:  # the parent; handled by the history path
                         continue
                     maybe_review(channel, str(r.get("text", "")), root_ts=thread_ts, msg_ts=r_ts)
+        persist()
 
     try:
         while True:
@@ -246,10 +342,3 @@ def run_slack_watch(
     except KeyboardInterrupt:
         sys.stderr.write("\nStopped.\n")
         return 0
-
-
-def _ts_float(ts: str) -> float:
-    try:
-        return float(ts)
-    except (TypeError, ValueError):
-        return 0.0

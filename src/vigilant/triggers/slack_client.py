@@ -94,6 +94,23 @@ class SlackClient:
         messages = payload.get("messages", [])
         return messages if isinstance(messages, list) else []
 
+    def conversations_history_page(
+        self, channel: str, oldest: str | None = None, cursor: str | None = None, limit: int = 200
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """One page of channel history plus the next cursor (``None`` when done).
+
+        Used to paginate a wider startup seed / downtime catch-up than a single
+        ``conversations_history`` call returns.
+        """
+        payload = self._call(
+            "conversations.history",
+            {"channel": channel, "oldest": oldest, "cursor": cursor,
+             "limit": limit, "inclusive": "false"},
+        )
+        messages = payload.get("messages", [])
+        next_cursor = payload.get("response_metadata", {}).get("next_cursor") or None
+        return (messages if isinstance(messages, list) else []), next_cursor
+
     def conversations_replies(
         self, channel: str, ts: str, oldest: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:
