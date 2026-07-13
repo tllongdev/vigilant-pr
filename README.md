@@ -15,13 +15,18 @@ GitHub App, just your token.
 
 ```mermaid
 flowchart LR
-    A["You are tagged as a<br/>reviewer on a GitHub PR"] --> B["Vigilant PR reads<br/>the PR and diff"]
-    A2["Beta: you are @-mentioned in a<br/>configured Slack or Teams channel"] -.-> B
+    C1(["run: vigilant watch"]) --> A["You are tagged as a<br/>reviewer on a GitHub PR"]
+    C2(["run: vigilant slack-watch<br/>or vigilant teams"]) -.-> A2["Beta: you are @-mentioned in a<br/>configured Slack or Teams channel"]
+    A --> B["Vigilant PR reads<br/>the PR and diff"]
+    A2 -.-> B
     B --> C["Adversarial review,<br/>severity-tagged findings"]
     C --> D["Posts inline comments<br/>as you, not a bot"]
     D --> E["Approves if nothing blocks,<br/>comments if it does"]
     classDef beta stroke:#a98bff,color:#a98bff,stroke-dasharray:5 5;
+    classDef cmd fill:#0d2038,stroke:#4da3ff,color:#cfe6ff;
     class A2 beta;
+    class C2 beta;
+    class C1 cmd;
 ```
 
 ## Status
