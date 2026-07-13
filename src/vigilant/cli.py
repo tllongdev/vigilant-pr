@@ -3,14 +3,17 @@
     vigilant review <pr-url-or-number> [--repo owner/repo] [--model P/M|--opus|--sonnet] [--dry-run]
     vigilant threads <pr-url-or-number> [--repo owner/repo] [--dry-run]
     vigilant watch [--once] [--poll-interval N] [--daily-cap N]
-    vigilant slack                      # Slack Socket Mode listener
+    vigilant slack-watch --channel C0123 [--poll-interval N] [--once] [--no-reply]
+    vigilant slack                      # Slack Socket Mode listener (needs an app)
     vigilant teams [--host H] [--port P] # Microsoft Teams webhook (beta)
     vigilant models                     # list models your credentials can reach
 
-`watch` polls for PRs where you are a requested reviewer. `slack`/`teams` review
-PRs on request from chat. All surfaces post on behalf of your GitHub token, and
-run against any model (Claude, or free tiers like Groq/Gemini/NVIDIA, or a local
-model) via a `provider/model` string - see `vigilant models`.
+`watch` polls for PRs where you are a requested reviewer. `slack-watch` polls a
+Slack channel (no app/admin approval) and reviews PRs you're @-mentioned on;
+`slack`/`teams` review PRs on request from chat. All surfaces post on behalf of
+your GitHub token, and run against any model (Claude, or free tiers like
+Groq/Gemini/NVIDIA, or a local model) via a `provider/model` string - see
+`vigilant models`.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ from .engine import (
 )
 
 # Commands that touch GitHub and therefore need `gh`/GH_TOKEN available.
-_GITHUB_COMMANDS = {"review", "threads", "watch", "slack", "teams"}
+_GITHUB_COMMANDS = {"review", "threads", "watch", "slack-watch", "slack", "teams"}
 
 
 def _resolve_model(args: argparse.Namespace) -> str | None:
@@ -132,6 +135,25 @@ def main(argv: list[str] | None = None) -> int:
     watch_p.add_argument("--daily-cap", type=int, help="Max reviews per UTC day (default 50).")
     _add_model_flags(watch_p)
 
+    slack_watch_p = subparsers.add_parser(
+        "slack-watch",
+        help="Daemon: poll a Slack channel (no app) and review PRs you're @-mentioned on.",
+    )
+    slack_watch_p.add_argument(
+        "--channel", action="append", dest="channels", metavar="CHANNEL_ID",
+        help="Slack channel ID to watch (repeatable). Or set VIGILANT_SLACK_CHANNELS.",
+    )
+    slack_watch_p.add_argument(
+        "--poll-interval", type=int, default=60, help="Seconds between polls (default 60)."
+    )
+    slack_watch_p.add_argument(
+        "--once", action="store_true", help="Run a single poll pass and exit (testing)."
+    )
+    slack_watch_p.add_argument(
+        "--no-reply", action="store_true", help="Do not post the outcome back to Slack."
+    )
+    _add_model_flags(slack_watch_p)
+
     slack_p = subparsers.add_parser(
         "slack",
         help="Daemon: listen on Slack (Socket Mode) and review PRs on request.",
@@ -177,6 +199,16 @@ def main(argv: list[str] | None = None) -> int:
         return run_threads_only(args.pr, config)
     if args.command == "watch":
         return run_watch(config, once=args.once)
+    if args.command == "slack-watch":
+        from .triggers.slack_poll import run_slack_watch
+
+        return run_slack_watch(
+            config,
+            channels=args.channels,
+            poll_interval=args.poll_interval,
+            once=args.once,
+            reply=not args.no_reply,
+        )
     if args.command == "slack":
         from .triggers.slack import run_slack
 

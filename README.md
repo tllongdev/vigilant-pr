@@ -172,11 +172,48 @@ The watcher uses only your token. It needs:
 - Repo read access sufficient for `gh search prs --review-requested=@me` to see
   the PRs you are tagged on.
 
-## Slack trigger
+## Slack watch (no app, recommended)
+
+`vigilant slack-watch` polls a Slack channel and reviews any PR you're
+**@-mentioned** on. It needs **no Slack app and no workspace-admin approval** -
+it authenticates with a token you already have and only reads a channel you can
+already read. This is the right choice for locked-down corporate workspaces, and
+it's dependency-free (stdlib only - no `[slack]` extra needed).
+
+It works with either:
+- a browser-session token (`xoxc-...`) plus the `d` cookie (`xoxd-...`) - the
+  same tokens the ad-hoc Slack CLI uses, no app required, or
+- a bot/user OAuth token (`xoxb-` / `xoxp-`) via a Bearer header, if you have one.
+
+```bash
+export SLACK_TOKEN="xoxc-..."               # or xoxb-/xoxp-
+export SLACK_COOKIE_D="xoxd-..."            # required only for xoxc- tokens
+export GH_TOKEN="ghp_..."
+export VIGILANT_MODEL="groq/llama-3.3-70b-versatile"   # or any provider
+vigilant slack-watch --channel C0123ABCD    # repeatable, or VIGILANT_SLACK_CHANNELS=C1,C2
+```
+
+A message triggers a review only when it both @-mentions you **and** contains a
+GitHub PR link, so it won't fire on every PR posted in a busy channel (and it
+never loops on its own reply). By default it posts the outcome back in-thread;
+pass `--no-reply` to stay silent. Your Slack user id is auto-detected from the
+token via `auth.test`; override with `VIGILANT_SLACK_USER_ID`. Find a channel ID
+from the channel's "View channel details" footer, or the `/archives/C…` URL.
+
+```bash
+docker run -d --name vigilant-slack-watch --restart unless-stopped \
+  -e GH_TOKEN -e GROQ_API_KEY -e VIGILANT_MODEL \
+  -e SLACK_TOKEN -e SLACK_COOKIE_D -e VIGILANT_SLACK_CHANNELS \
+  ghcr.io/tllongdev/vigilant-pr:latest slack-watch
+```
+
+## Slack trigger (Socket Mode - requires a Slack app)
 
 `vigilant slack` runs a Slack listener that reviews a PR when you ask it to in
 chat. It uses **Socket Mode** (an outbound WebSocket), so like the watcher it
-needs no inbound ports. Install the Slack extra (`pipx install
+needs no inbound ports - but it **does** require creating and installing a Slack
+app, which usually needs workspace-admin approval. If that's a blocker, use
+`slack-watch` above instead. Install the Slack extra (`pipx install
 'vigilant-pr[slack]'`) or use the container image, which bundles it.
 
 Three ways to trigger a review:
