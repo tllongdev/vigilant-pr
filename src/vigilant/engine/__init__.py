@@ -18,7 +18,7 @@ from .providers import (
     resolve_provider,
 )
 from .review import run_review, run_threads_only
-from .util import github_preflight
+from .util import ensure_github_auth, github_preflight
 from .watcher import run_watch
 
 __all__ = [
@@ -31,6 +31,7 @@ __all__ = [
     "ReviewFailedError",
     "auto_select_model",
     "build_signature",
+    "ensure_github_auth",
     "github_preflight",
     "list_models",
     "load_dotenv",

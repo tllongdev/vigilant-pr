@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from ..engine import Config, model_key_missing
+from ..ui import print_banner, status
 from .core import format_reply, review_from_text
 
 
@@ -119,15 +120,26 @@ def run_teams(config: Config, host: str = "0.0.0.0", port: int = 8080) -> int:
         sys.stderr.write(key_problem + "\n")
         return 1
 
+    if sys.stdout.isatty():
+        print_banner()
+
     result_webhook = os.environ.get("TEAMS_INCOMING_WEBHOOK_URL")
     handler = _make_handler(config, secret, result_webhook)
     server = ThreadingHTTPServer((host, port), handler)
     sys.stderr.write(
-        f"Vigilant PR Teams listener on http://{host}:{port} "
+        f"teams-watch listening on http://{host}:{port} "
         f"(results -> {'incoming webhook' if result_webhook else 'ack only'}). Ctrl-C to stop.\n"
     )
+    heartbeat = (
+        f"teams-watch running | http://{host}:{port} | "
+        f"results -> {'incoming webhook' if result_webhook else 'ack only'}"
+    )
+    st = status(heartbeat)
+    st.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         server.shutdown()
+    finally:
+        st.stop()
     return 0

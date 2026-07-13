@@ -58,6 +58,33 @@ def github_preflight() -> str | None:
     return None
 
 
+def ensure_github_auth(interactive: bool = True) -> bool:
+    """Make GitHub access usable, running `gh auth login` for the user if needed.
+
+    Returns True when access is ready afterwards. When `gh` is authenticated or a
+    GH_TOKEN is present, this is a no-op that returns True. When `gh` is installed
+    but unauthenticated and we're interactive on a TTY, it launches the normal
+    `gh auth login` browser/device flow (inheriting stdio) so the user just
+    follows the prompts. When `gh` is missing, it prints the install URL and
+    returns False (we can't reliably auto-install it).
+    """
+    problem = github_preflight()
+    if problem is None:
+        return True
+    if shutil.which("gh") is None:
+        sys.stderr.write(problem + "\n")
+        return False
+    if not (interactive and sys.stdin.isatty()):
+        sys.stderr.write(problem + "\n")
+        return False
+    sys.stdout.write("\nConnecting your GitHub account (a browser window will open)...\n")
+    subprocess.run(["gh", "auth", "login"], check=False)  # interactive; inherits stdio
+    ok = github_preflight() is None
+    if not ok:
+        sys.stderr.write("GitHub is still not authenticated. Re-run and complete `gh auth login`.\n")
+    return ok
+
+
 def run(
     cmd: list[str],
     check: bool = True,

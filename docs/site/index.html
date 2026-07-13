@@ -241,23 +241,23 @@
 
   <section id="quickstart">
     <h2>Quickstart</h2>
-    <p class="sub">You need the GitHub CLI authenticated as you (or a <code>GH_TOKEN</code>) and a model key - Claude, or a free tier like Groq/Gemini/NVIDIA.</p>
+    <p class="sub"><code>vigilant init</code> connects your GitHub account and stores a model key for you - no files to edit. Keys live 0600 in <code>~/.config/vigilant-pr/credentials.json</code>.</p>
 <pre><span class="c"># Install (no-Docker path; needs `gh` on PATH)</span>
 pipx install git+https://github.com/tllongdev/vigilant-pr
 
-<span class="c"># Run free: grab a no-card Groq key at console.groq.com/keys</span>
-export <span class="k">GROQ_API_KEY</span>=gsk_...
-export <span class="k">VIGILANT_MODEL</span>=groq/llama-3.3-70b-versatile
+<span class="c"># Guided setup: connects GitHub, stores a model key (free options first)</span>
+vigilant init
 
-<span class="c"># Review a PR and post as you</span>
-vigilant review https://github.com/owner/repo/pull/123
+<span class="c"># Auto-review any open PR where you're a requested reviewer</span>
+vigilant github-watch
 
-<span class="c"># Or bring Claude for the deepest reviews</span>
-export <span class="k">ANTHROPIC_API_KEY</span>=sk-ant-...
-vigilant review 123 --repo owner/repo --opus
+<span class="c"># Manage / switch models anytime</span>
+vigilant model list
+vigilant model use groq
 
-<span class="c"># Preview without posting  (or VIGILANT_MODEL=mock for a keyless demo)</span>
-vigilant review 123 --repo owner/repo --dry-run</pre>
+<span class="c"># Review a single PR (preview with --dry-run; VIGILANT_MODEL=mock for a keyless demo)</span>
+vigilant review https://github.com/owner/repo/pull/123 --dry-run</pre>
+    <p class="sub" style="margin-top:14px">Prefer env vars or CI? Set <code>GROQ_API_KEY</code>/<code>ANTHROPIC_API_KEY</code> and <code>VIGILANT_MODEL</code> yourself, or use a <code>.env</code> file - real env &gt; <code>.env</code> &gt; stored keys.</p>
 
     <h2 style="margin-top:30px">Run the watcher as a daemon</h2>
     <p class="sub">Polling only - no inbound ports. Auto-reviews PRs where you are tagged.</p>

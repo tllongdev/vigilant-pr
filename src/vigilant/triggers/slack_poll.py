@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from ..engine import Config, model_key_missing
+from ..ui import print_banner, status
 from .core import extract_pr_refs, format_reply, review_from_text
 from .slack_auth import TokenSource, build_token_source
 from .slack_client import AUTH_ERROR_CODES, SlackClient, SlackError
@@ -137,6 +138,9 @@ def run_slack_watch(
     if key_problem:
         sys.stderr.write(key_problem + "\n")
         return 1
+
+    if sys.stdout.isatty():
+        print_banner()
 
     watch_channels = _channels_from_env(channels)
     if not watch_channels:
@@ -338,7 +342,13 @@ def run_slack_watch(
             poll_once()
             if once:
                 return 0
-            time.sleep(poll_interval)
+            now = time.strftime("%H:%M:%S")
+            heartbeat = (
+                f"slack-watch running | {len(watch_channels)} channel(s) | "
+                f"last poll {now} | {len(reviewed)} reviewed"
+            )
+            with status(heartbeat):
+                time.sleep(poll_interval)
     except KeyboardInterrupt:
         sys.stderr.write("\nStopped.\n")
         return 0

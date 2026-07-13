@@ -1,6 +1,7 @@
 """Vigilant PR command-line interface.
 
-    vigilant init                       # first-run setup wizard (writes .env)
+    vigilant init                       # guided setup: connect GitHub, store a model key
+    vigilant model add|list|use|remove  # manage stored providers and switch active model
     vigilant review <pr-url-or-number> [--repo owner/repo] [--model P/M|--opus|--sonnet] [--dry-run]
     vigilant threads <pr-url-or-number> [--repo owner/repo] [--dry-run]
     vigilant github-watch [--once] [--poll-interval N] [--daily-cap N]
@@ -37,6 +38,14 @@ from .engine import (
     run_review,
     run_threads_only,
     run_watch,
+)
+from .store import (
+    apply_store_to_env,
+    get_active_model,
+    list_stored,
+    mask_key,
+    remove_provider,
+    set_active_model,
 )
 
 # Commands that touch GitHub and therefore need `gh`/GH_TOKEN available.
@@ -111,6 +120,7 @@ def _effective_model(args: argparse.Namespace) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()  # convenience: load ./.env (real env vars still win)
+    apply_store_to_env()  # managed credential store fills anything .env/env didn't
     parser = argparse.ArgumentParser(
         prog="vigilant",
         description=(
@@ -180,8 +190,30 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser(
         "init",
-        help="Interactive setup: pick a model, add keys, write .env.",
+        help="Guided setup: connect GitHub and store a model key (no files to edit).",
     )
+
+    model_p = subparsers.add_parser(
+        "model",
+        help="Manage stored model providers and switch between them.",
+    )
+    model_sub = model_p.add_subparsers(dest="model_command", required=True, metavar="<action>")
+    model_add_p = model_sub.add_parser(
+        "add", help="Add/replace a provider API key (stored; becomes the active model)."
+    )
+    model_add_p.add_argument(
+        "provider", nargs="?",
+        help="Provider id (groq, gemini, nvidia_nim, anthropic, openai, openrouter, ollama). "
+             "Omit to choose interactively.",
+    )
+    model_sub.add_parser("list", help="List stored providers and the active model.")
+    model_use_p = model_sub.add_parser("use", help="Switch the active model.")
+    model_use_p.add_argument(
+        "model",
+        help="provider/model (e.g. groq/llama-3.3-70b-versatile) or a stored provider id.",
+    )
+    model_rm_p = model_sub.add_parser("remove", help="Remove a stored provider key.")
+    model_rm_p.add_argument("provider", help="Provider id to remove.")
 
     args = parser.parse_args(argv)
     args.command = _COMMAND_ALIASES.get(args.command, args.command)
@@ -191,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
         from .onboarding import run_init
 
         return run_init()
+    if args.command == "model":
+        return run_model_command(args)
 
     if args.command in _GITHUB_COMMANDS:
         gh_problem = github_preflight()
@@ -245,6 +279,64 @@ _EXAMPLE_MODELS = {
     "ollama": "ollama/qwen2.5:14b",
     "openai_compatible": "openai_compatible/<model> (set VIGILANT_API_BASE)",
 }
+
+
+def run_model_command(args: argparse.Namespace) -> int:
+    """Dispatch `vigilant model <add|list|use|remove>`."""
+    action = args.model_command
+    if action == "add":
+        from .onboarding import add_provider_flow
+
+        return 0 if add_provider_flow(getattr(args, "provider", None)) else 1
+    if action == "list":
+        return run_model_list()
+    if action == "use":
+        return run_model_use(args.model)
+    if action == "remove":
+        return run_model_remove(args.provider)
+    return 2
+
+
+def run_model_list() -> int:
+    """Show stored providers, their masked keys, and which model is active."""
+    stored = list_stored()
+    active = get_active_model()
+    if not stored:
+        print("No stored model providers yet. Add one:\n  vigilant model add")
+        return 0
+    print("Stored model providers (* = active):\n")
+    for provider, info in stored.items():
+        model = info.get("model", "")
+        key = info.get("api_key", "")
+        mark = "*" if model and model == active else " "
+        shown_key = mask_key(key) if key else "(no key)"
+        print(f"  {mark} {provider:<14} {shown_key:<16} {model}")
+    print(f"\nActive model: {active or '(none)'}")
+    print("Switch with: vigilant model use <provider/model>")
+    return 0
+
+
+def run_model_use(target: str) -> int:
+    """Set the active model. Accepts a `provider/model` string or a stored provider id."""
+    stored = list_stored()
+    if target in stored and stored[target].get("model"):
+        model = str(stored[target]["model"])
+    else:
+        model = target
+    set_active_model(model)
+    provider, _ = resolve_provider(model)
+    if provider not in ("mock", "ollama") and not provider_api_key(provider) and provider not in stored:
+        print(f"Note: no API key found for '{provider}'. Add one: vigilant model add {provider}")
+    print(f"Active model set to {model}.")
+    return 0
+
+
+def run_model_remove(provider: str) -> int:
+    if remove_provider(provider):
+        print(f"Removed stored key for '{provider}'. Active model: {get_active_model() or '(none)'}")
+        return 0
+    print(f"No stored provider '{provider}'.")
+    return 1
 
 
 def run_models(config: Config) -> int:

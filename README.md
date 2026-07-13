@@ -13,10 +13,16 @@ Get tagged as a reviewer on a pull request, and Vigilant PR reviews it and posts
 the comments as **you** - your GitHub identity, not a bot. No repo-side setup, no
 GitHub App, just your token.
 
+<p align="center">
+  <img src="assets/vigilant-terminal.png" alt="Vigilant PR running in the terminal" width="760" />
+</p>
+
 ```mermaid
 flowchart LR
-    C1(["run: vigilant github-watch"]) --> A["You are tagged as a<br/>reviewer on a GitHub PR"]
-    C2(["run: vigilant slack-watch<br/>or vigilant teams-watch"]) -.-> A2["Beta: you are @-mentioned in a<br/>configured Slack or Teams channel"]
+    CFG(["Configure in the terminal:<br/>vigilant init"]) --> C1
+    CFG -.-> C2
+    C1(["vigilant github-watch"]) --> A["You are tagged as a<br/>reviewer on a GitHub PR"]
+    C2(["vigilant slack-watch<br/>or vigilant teams-watch"]) -.-> A2["Beta: you are @-mentioned in a<br/>configured Slack or Teams channel"]
     A --> B["Vigilant PR reads<br/>the PR and diff"]
     A2 -.-> B
     B --> C["Adversarial review,<br/>severity-tagged findings"]
@@ -26,6 +32,7 @@ flowchart LR
     classDef cmd fill:#0d2038,stroke:#4da3ff,color:#cfe6ff;
     class A2 beta;
     class C2 beta;
+    class CFG cmd;
     class C1 cmd;
 ```
 
@@ -52,23 +59,28 @@ Slack and Teams support also exists, but is still beta.
 The core engine is dependency-free (standard library only) - model calls go over
 plain HTTP, no SDKs.
 
-Vigilant runs a quick preflight before any GitHub command and tells you exactly
-what to do if `gh` is missing or not logged in, so you are never left guessing.
+## Setup
 
-## Configuration (`.env`)
+Run `vigilant init` once. It connects your GitHub account (runs `gh auth login`
+for you if needed) and stores a model key - there are no files to edit. Keys are
+kept in a `0600` file at `~/.config/vigilant-pr/credentials.json` (the same
+posture as the `gh` and `aws` CLIs).
 
-You can put your keys in a `.env` file in the directory you run from instead of
-exporting them each time. Real environment variables always take precedence, so
-`.env` is just a convenience default. Copy the template and fill in what you use:
+Manage and switch models with the `model` command:
 
 ```bash
-cp .env.example .env
-# then edit .env
+vigilant model add            # pick a provider, paste a key (stored, becomes active)
+vigilant model add groq       # or name the provider directly
+vigilant model list           # see stored providers, masked keys, and the active one
+vigilant model use groq       # switch the active model (by provider or provider/model)
+vigilant model remove openai  # delete a stored key
 ```
 
-If you set no model, Vigilant auto-selects one from whichever provider key it
-finds (Anthropic preferred), and prints which model it chose - so a free-tier
-user with only `GROQ_API_KEY` is never told to "set `ANTHROPIC_API_KEY`".
+Prefer files/CI? A `.env` file and real environment variables still work and
+always take precedence over the stored keys (real env > `.env` > store). Copy
+`.env.example` to `.env` and fill in what you use. If you set no model, Vigilant
+auto-selects one from whichever provider key it finds (Anthropic preferred) and
+prints which model it chose.
 
 ## Install
 
@@ -86,13 +98,14 @@ From zero to auto-reviewing PRs as you, in three commands:
 
 ```bash
 pipx install git+https://github.com/tllongdev/vigilant-pr@v1.0.0
-vigilant init      # checks GitHub auth, picks a model (free options first), writes .env
+vigilant init      # connects GitHub, picks + stores a model key (free options first)
 vigilant github-watch   # auto-reviews any open PR where you're a requested reviewer
 ```
 
-`vigilant init` walks you through everything: it confirms `gh` is authenticated
-(or prompts you to set `GH_TOKEN`), lets you pick a model provider (leading with
-free, no-credit-card options like Groq), validates the key, and writes a `.env`.
+`vigilant init` walks you through everything: it connects your GitHub account
+(running `gh auth login` for you if needed), lets you pick a model provider
+(leading with free, no-credit-card options like Groq), validates the key, and
+stores it. Nothing to hand-edit; switch models later with `vigilant model use`.
 
 Want to see a review before it posts anything? Dry-run any PR first:
 

@@ -17,10 +17,19 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..ui import print_banner, status
 from .config import Config
 from .providers import model_key_missing
 from .review import fetch_last_bot_review_sha, run_review
 from .util import run
+
+
+def _watch_status(config: Config, reviewed_today: int) -> str:
+    now = datetime.now(UTC).strftime("%H:%M:%S")
+    return (
+        f"github-watch running | model={config.model} | last poll {now} | "
+        f"{reviewed_today} reviewed today (cap {config.daily_cap})"
+    )
 
 
 def _seen_path(override: str | Path | None = None) -> Path:
@@ -141,10 +150,13 @@ def run_watch(config: Config, once: bool = False, seen_path: str | Path | None =
         sys.stderr.write(key_problem + "\n")
         return 1
 
+    if sys.stdout.isatty():
+        print_banner()
+
     day = datetime.now(UTC).date()
     reviewed_today = 0
     sys.stderr.write(
-        f"Vigilant PR watcher started (poll={config.poll_interval}s, "
+        f"github-watch started (poll={config.poll_interval}s, "
         f"daily_cap={config.daily_cap}, model={config.model}).\n"
     )
 
@@ -189,4 +201,7 @@ def run_watch(config: Config, once: bool = False, seen_path: str | Path | None =
 
         if once:
             return 0
-        time.sleep(config.poll_interval)
+        # Animate a live "running" heartbeat only while idling (TTY only); no
+        # output collides with a review in progress, and off-TTY it's silent.
+        with status(_watch_status(config, reviewed_today)):
+            time.sleep(config.poll_interval)
