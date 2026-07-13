@@ -98,6 +98,10 @@ specific models, watcher tuning, and the chat surfaces.
 ---
 
 <p align="center">
+  <a href="https://square.link/u/A8qxaJVb"><img src="assets/donate-qr.png" alt="Scan to donate to Vigilant PR" width="240" /></a>
+</p>
+
+<p align="center">
   <a href="https://square.link/u/A8qxaJVb"><img src="https://img.shields.io/badge/Donate-pay%20what%20you%20want-006aff?style=for-the-badge&logo=square&logoColor=white" alt="Donate to Vigilant PR" /></a>
 </p>
 
