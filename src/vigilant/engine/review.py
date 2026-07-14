@@ -1,5 +1,3 @@
-# Copyright 2026 Timothy Long / LongIntel
-# SPDX-License-Identifier: Apache-2.0
 """Vigilant PR review engine.
 
 Ported from the production knowledge-substrate reviewer with behavior preserved:
@@ -23,6 +21,7 @@ from typing import Any
 from .config import GENERIC_PROFILE, MODEL_PROFILES, Config
 from .errors import ReviewFailedError
 from .identity import (
+    build_footnote,
     build_signature,
     resolve_handle,
     signature_index,
@@ -285,10 +284,14 @@ def format_review_body(
     summary = review.get("summary", "").strip() or "(no summary)"
     skipped = review.get("skipped", []) or []
 
-    table_rows = []
-    for f in findings:
-        table_rows.append(f"| {f.severity_marker} | `{f.path}:{f.line}` | {f.title} |")
-    table = "\n".join(table_rows) if table_rows else "| (none) | | |"
+    # A compact, human-reading list (not a table): each finding is also an inline
+    # comment on its line, so this is just a scannable at-a-glance recap.
+    if findings:
+        findings_list = "\n".join(
+            f"{f.severity_marker} `{f.path}:{f.line}` - {f.title}" for f in findings
+        )
+    else:
+        findings_list = "No new issues found in this diff."
 
     skipped_section = ""
     if skipped:
@@ -309,9 +312,7 @@ def format_review_body(
         f"{sig}\n\n"
         f"**Findings:** {tally_str}\n\n"
         f"{summary}\n\n"
-        f"| Severity | File:Line | Issue |\n"
-        f"| --- | --- | --- |\n"
-        f"{table}"
+        f"{findings_list}"
         f"{skipped_section}"
         f"{sha_marker}"
     )
@@ -424,6 +425,83 @@ def run_threads_only(target: str, config: Config) -> int:
     posted = host.post_thread_responses(repo, pr_number, thread_responses, sig)
     sys.stderr.write(f"Posted {posted}/{len(thread_responses)} thread responses\n")
     return 0
+
+
+def _print_review_preview(
+    model: str,
+    event: str,
+    body: str,
+    findings: list[Finding],
+    sig: str,
+    thread_responses: list[dict[str, Any]],
+) -> None:
+    """Print the full review (summary body + inline comments + thread replies).
+
+    Shared by dry-run and the approval gate so the user sees exactly what would
+    post before deciding.
+    """
+    print("=" * 80)
+    print(f"REVIEW BODY ({event}) - reviewed by {model}:")
+    print("=" * 80)
+    print(body)
+    print()
+    for i, f in enumerate(findings, 1):
+        print("=" * 80)
+        print(f"INLINE COMMENT {i}/{len(findings)} - {f.path}:{f.line}")
+        print("=" * 80)
+        print(format_inline_comment(f, sig))
+        print()
+    if thread_responses:
+        print("=" * 80)
+        print(f"THREAD RESPONSES ({len(thread_responses)}):")
+        print("=" * 80)
+        for tr in thread_responses:
+            disp = tr.get("disposition", "?")
+            cid = tr.get("comment_id", "?")
+            reply = tr.get("reply", "")
+            print(f"  [{disp}] comment {cid}: {reply}")
+        print()
+
+
+def _approve_before_post(
+    repo: str,
+    pr_number: int,
+    handle: str | None,
+    model: str,
+    event: str,
+    body: str,
+    findings: list[Finding],
+    sig: str,
+    thread_responses: list[dict[str, Any]],
+) -> bool:
+    """Preview the review and ask the user to approve posting it.
+
+    Returns True to post, False to skip. When there's no interactive terminal
+    (piped/CI), approval can't be collected, so it refuses to post (safe default)
+    and tells the user how to proceed.
+    """
+    if not sys.stdin.isatty():
+        sys.stderr.write(
+            "Approval required (--approve / VIGILANT_REQUIRE_APPROVAL) but no interactive "
+            "terminal to confirm; not posting. Run in a terminal to approve, or disable with "
+            "--no-approve / VIGILANT_REQUIRE_APPROVAL=0 to auto-post.\n"
+        )
+        return False
+
+    _print_review_preview(model, event, body, findings, sig, thread_responses)
+    as_who = f"@{handle}" if handle else "you"
+    tally = f"{len(findings)} inline comment(s), {len(thread_responses)} thread reply(ies)"
+    try:
+        answer = input(
+            f"\nPost this {event} review on {repo}#{pr_number} as {as_who}? "
+            f"[{tally}]  (y/N): "
+        ).strip().lower()
+    except EOFError:
+        answer = ""
+    if answer in ("y", "yes"):
+        return True
+    sys.stderr.write("Skipped: review not posted.\n")
+    return False
 
 
 def run_review(target: str, config: Config) -> int:
@@ -574,6 +652,9 @@ def run_review(target: str, config: Config) -> int:
             )
         )
 
+    if config.attribution:
+        body += "\n\n" + build_footnote(model, handle)
+
     thread_responses = review.get("thread_responses", [])
     event = decide_event(findings + dropped_findings, thread_responses)
 
@@ -588,31 +669,16 @@ def run_review(target: str, config: Config) -> int:
         return 0
 
     if config.dry_run:
-        print("=" * 80)
-        print(f"REVIEW BODY ({event}) - reviewed by {model}:")
-        print("=" * 80)
-        print(body)
-        print()
-        for i, f in enumerate(findings, 1):
-            print("=" * 80)
-            print(f"INLINE COMMENT {i}/{len(findings)} - {f.path}:{f.line}")
-            print("=" * 80)
-            print(format_inline_comment(f, sig))
-            print()
-        if thread_responses:
-            print("=" * 80)
-            print(f"THREAD RESPONSES ({len(thread_responses)}):")
-            print("=" * 80)
-            for tr in thread_responses:
-                disp = tr.get("disposition", "?")
-                cid = tr.get("comment_id", "?")
-                reply = tr.get("reply", "")
-                print(f"  [{disp}] comment {cid}: {reply}")
-            print()
+        _print_review_preview(model, event, body, findings, sig, thread_responses)
         sys.stderr.write(
             f"\nDry run complete. {len(findings)} findings, "
             f"{len(thread_responses)} thread responses ({event}) from {model}.\n"
         )
+        return 0
+
+    if config.require_approval and not _approve_before_post(
+        repo, pr_number, handle, model, event, body, findings, sig, thread_responses
+    ):
         return 0
 
     sys.stderr.write(

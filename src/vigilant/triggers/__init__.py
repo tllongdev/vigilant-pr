@@ -1,5 +1,3 @@
-# Copyright 2026 Timothy Long / LongIntel
-# SPDX-License-Identifier: Apache-2.0
 """Chat trigger surfaces for Vigilant PR.
 
 These map a review request ("review this PR") to `engine.run_review`, which posts

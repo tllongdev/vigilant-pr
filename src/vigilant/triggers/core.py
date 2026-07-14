@@ -1,5 +1,3 @@
-# Copyright 2026 Timothy Long / LongIntel
-# SPDX-License-Identifier: Apache-2.0
 """Shared, dependency-free logic for chat triggers.
 
 A chat message like "please review https://github.com/o/r/pull/42 --opus" gets

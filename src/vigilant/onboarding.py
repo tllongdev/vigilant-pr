@@ -298,8 +298,18 @@ def run_init(env_path: str = ".env") -> int:
     # 2) Model provider -> managed credential store.
     add_provider_flow(None)
 
-    # 3) Optional Slack monitoring (channels/tokens still live in .env).
+    # 3) Approval gate - recommended while trying an unfamiliar model.
     updates: dict[str, str] = {}
+    if _yes(
+        "\nReview each result before it posts, until you trust the model? "
+        "(recommended while trying a new model)",
+        default=True,
+    ):
+        updates["VIGILANT_REQUIRE_APPROVAL"] = "1"
+        print("  Enabled: reviews will preview and ask before posting. "
+              "Turn off later with `--no-approve` or VIGILANT_REQUIRE_APPROVAL=0.")
+
+    # 4) Optional Slack monitoring (channels/tokens still live in .env).
     if _yes("\nSet up Slack monitoring (review PRs you're @-mentioned on)?", default=False):
         channel = _prompt("Slack channel ID to watch (e.g. C0123ABCD)")
         if channel:
@@ -318,7 +328,7 @@ def run_init(env_path: str = ".env") -> int:
                         updates["SLACK_COOKIE_D"] = cookie
     if updates:
         upsert_env_file(env_path, updates)
-        print(f"Wrote Slack settings to {env_path}.")
+        print(f"Wrote settings to {env_path}.")
 
     print("\nYou're ready:")
     print("  vigilant review https://github.com/owner/repo/pull/123")

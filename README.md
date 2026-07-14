@@ -146,7 +146,23 @@ vigilant review 123 --repo owner/repo --opus
 
 # Preview without posting
 vigilant review 123 --repo owner/repo --dry-run
+
+# Preview, then approve before it posts (great while trying a new model)
+vigilant review 123 --repo owner/repo --approve
 ```
+
+### Review before it posts (approval gate)
+
+By default reviews post automatically. If you're trying an unfamiliar model - or
+just want to watch what it produces before trusting it - turn on the approval
+gate: Vigilant prints the full review (summary + inline comments) and asks for a
+`y/N` before anything is posted.
+
+- One-off: add `--approve` to `review` or `github-watch`.
+- Always on: set `VIGILANT_REQUIRE_APPROVAL=1` (or answer "yes" in `vigilant init`).
+- Turn it back off: `--no-approve` or `VIGILANT_REQUIRE_APPROVAL=0`.
+
+Once you trust the model, drop the flag and let it post on your behalf.
 
 ## Models
 
@@ -369,9 +385,17 @@ Then @-mention the outgoing webhook with a PR link in a channel.
 ## Identity and honesty
 
 Comments are authored by your GitHub token, so they are *your* review and read
-as your own writing - there is no visible bot disclaimer. Each body carries a
-hidden HTML-comment marker (invisible on GitHub) that lets the tool recognize
-its own prior comments for dedup and re-review.
+as your own writing. By default each review summary ends with a short, quiet
+footnote disclosing that it was AI-assisted, which model produced it, and who it
+was posted on behalf of - honest attribution without a heavy bot banner:
+
+> ---
+> <sub>AI-assisted review via Vigilant PR · claude-sonnet-5 · posted by @you</sub>
+
+Disable it with `--no-attribution` or `VIGILANT_ATTRIBUTION=0` for private/personal
+use. Separately, each body carries a hidden HTML-comment marker (invisible on
+GitHub) that lets the tool recognize its own prior comments for dedup and
+re-review.
 
 Approval is mechanical and honest: the review is submitted as **APPROVE** when
 there are no blocking findings (no critical, no medium) - so nit-only or clean

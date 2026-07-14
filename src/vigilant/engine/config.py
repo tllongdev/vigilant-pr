@@ -74,6 +74,14 @@ class Config:
     temperature: float = 0.2
     max_tokens: int = 8000
 
+    # Output / posting behavior.
+    # `attribution`: append a short visible "AI-assisted review" footnote to the
+    #   review summary (on by default; disclosure for public/shared use).
+    # `require_approval`: preview the review and ask before posting, so a user can
+    #   watch what a new/unfamiliar model produces before trusting it to auto-post.
+    attribution: bool = True
+    require_approval: bool = False
+
     # Watcher (milestone 003)
     poll_interval: int = 120
     daily_cap: int = 50
@@ -109,6 +117,12 @@ class Config:
             cfg.temperature = float(os.environ["VIGILANT_TEMPERATURE"])
         if os.environ.get("VIGILANT_MAX_TOKENS"):
             cfg.max_tokens = int(os.environ["VIGILANT_MAX_TOKENS"])
+        if os.environ.get("VIGILANT_ATTRIBUTION") is not None:
+            cfg.attribution = _env_bool(os.environ["VIGILANT_ATTRIBUTION"], default=True)
+        if os.environ.get("VIGILANT_REQUIRE_APPROVAL") is not None:
+            cfg.require_approval = _env_bool(
+                os.environ["VIGILANT_REQUIRE_APPROVAL"], default=False
+            )
         if os.environ.get("VIGILANT_POLL_INTERVAL"):
             cfg.poll_interval = int(os.environ["VIGILANT_POLL_INTERVAL"])
         if os.environ.get("VIGILANT_DAILY_CAP"):
@@ -141,6 +155,16 @@ def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _env_bool(value: str, default: bool) -> bool:
+    """Parse a boolean env var. Accepts 1/0, true/false, yes/no, on/off."""
+    v = value.strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    return default
 
 
 def load_dotenv(path: str | Path = ".env") -> bool:

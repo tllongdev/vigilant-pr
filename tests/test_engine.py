@@ -6,23 +6,28 @@ the test fails. No mocks of the thing under test.
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
-from vigilant.engine.config import OPUS_MODEL, SONNET_MODEL
+from vigilant.engine.config import OPUS_MODEL, SONNET_MODEL, Config
 from vigilant.engine.identity import (
     SIG_MARKER,
     SIG_PREFIX_LEGACY,
     SIG_PREFIX_VIGILANT,
+    build_footnote,
     build_signature,
     is_signed_comment,
     signature_index,
 )
 from vigilant.engine.review import (
     Finding,
+    _approve_before_post,
     _norm_title,
     cap_nits,
     decide_event,
     filter_to_diff_lines,
+    format_review_body,
     parse_diff_lines,
     parse_review_json,
 )
@@ -181,3 +186,89 @@ def test_signature_index_finds_earliest_prefix() -> None:
     body = f"prefix text\n> {SIG_PREFIX_VIGILANT} here"
     assert signature_index(body) == body.find(SIG_PREFIX_VIGILANT)
     assert signature_index("no signature") == -1
+
+
+# --- footnote (visible attribution) ------------------------------------------
+
+def test_build_footnote_is_visible_and_names_model_and_handle() -> None:
+    fn = build_footnote("claude-sonnet-5", "tllongdev")
+    assert fn.startswith("---")  # visible rule, not an HTML comment
+    assert "AI-assisted review" in fn
+    assert "claude-sonnet-5" in fn
+    assert "@tllongdev" in fn
+    assert "<sub>" in fn
+
+
+def test_build_footnote_omits_handle_when_absent() -> None:
+    fn = build_footnote("groq/llama-3.3-70b-versatile", None)
+    assert "posted by" not in fn
+    assert "groq/llama-3.3-70b-versatile" in fn
+
+
+# --- review body: list, not table --------------------------------------------
+
+def test_format_review_body_uses_list_not_table() -> None:
+    review = {"summary": "Looks good overall.", "skipped": []}
+    findings = [Finding("critical", "auth.py", 42, "Token expiry not checked", "body")]
+    body = format_review_body(review, findings, "SIG", "abc123")
+    assert "| Severity |" not in body  # old table header gone
+    assert "| --- |" not in body
+    assert "`auth.py:42`" in body
+    assert "Token expiry not checked" in body
+    assert "SIG" in body  # hidden marker still present
+
+
+def test_format_review_body_empty_findings_message() -> None:
+    body = format_review_body({"summary": "clean", "skipped": []}, [], "SIG")
+    assert "No new issues found" in body
+
+
+def test_format_review_body_does_not_embed_footnote() -> None:
+    # The footnote is appended by run_review (so it lands after overflow notes),
+    # not by format_review_body itself.
+    body = format_review_body({"summary": "s", "skipped": []}, [], "SIG")
+    assert "AI-assisted review via" not in body
+
+
+# --- config: attribution / approval env parsing ------------------------------
+
+def test_config_defaults_attribution_on_approval_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("VIGILANT_ATTRIBUTION", raising=False)
+    monkeypatch.delenv("VIGILANT_REQUIRE_APPROVAL", raising=False)
+    cfg = Config.from_env()
+    assert cfg.attribution is True
+    assert cfg.require_approval is False
+
+
+def test_config_parses_attribution_and_approval_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VIGILANT_ATTRIBUTION", "0")
+    monkeypatch.setenv("VIGILANT_REQUIRE_APPROVAL", "yes")
+    cfg = Config.from_env()
+    assert cfg.attribution is False
+    assert cfg.require_approval is True
+
+
+# --- approval gate ------------------------------------------------------------
+
+def test_approve_before_post_refuses_without_tty(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    ok = _approve_before_post("o/r", 1, "me", "m", "COMMENT", "body", [], "SIG", [])
+    assert ok is False
+    assert "Approval required" in capsys.readouterr().err
+
+
+def test_approve_before_post_accepts_yes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a: "y")
+    assert _approve_before_post("o/r", 1, "me", "m", "COMMENT", "b", [], "SIG", []) is True
+
+
+def test_approve_before_post_rejects_no(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a: "n")
+    assert _approve_before_post("o/r", 1, "me", "m", "COMMENT", "b", [], "SIG", []) is False
+    assert "not posted" in capsys.readouterr().err

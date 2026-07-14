@@ -1,5 +1,3 @@
-# Copyright 2026 Timothy Long / LongIntel
-# SPDX-License-Identifier: Apache-2.0
 """Vigilant PR - a portable, workflow-agnostic AI PR reviewer that posts on your behalf."""
 
 from __future__ import annotations

@@ -1,5 +1,3 @@
-# Copyright 2026 Timothy Long / LongIntel
-# SPDX-License-Identifier: Apache-2.0
 """Identity and signature handling for Vigilant PR.
 
 Comments are authored by the running user's GitHub token, so they read as the
@@ -38,6 +36,25 @@ def build_signature(model: str, handle: str | None = None) -> str:
     model_str = f"{model} {suffix}".strip()
     who = f"; by=@{handle}" if handle else ""
     return f"{SIG_MARKER}: AI-assisted first-pass; model={model_str}{who} -->"
+
+
+REPO_URL = "https://github.com/tllongdev/vigilant-pr"
+
+
+def build_footnote(model: str, handle: str | None = None) -> str:
+    """Build the short, VISIBLE attribution footnote for a posted review.
+
+    Unlike the hidden marker, this renders on GitHub: a thin rule plus a small,
+    grey `<sub>` line disclosing the review was AI-assisted, which model produced
+    it, and who it was posted on behalf of. Kept quiet so it reads as a signature,
+    not a banner. Controlled by Config.attribution (on by default).
+    """
+    who = f" \u00b7 posted by @{handle}" if handle else ""
+    return (
+        "---\n"
+        f"<sub>\U0001f6e1\ufe0f AI-assisted review via [Vigilant PR]({REPO_URL}) "
+        f"\u00b7 {model}{who}</sub>"
+    )
 
 
 def is_signed_comment(body: str) -> bool:
