@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Model-agnostic inference layer.
 
 Vigilant PR runs against any model reachable over one of two wire protocols:

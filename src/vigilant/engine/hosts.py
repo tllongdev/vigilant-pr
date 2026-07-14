@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Host provider interface.
 
 Isolates every git-host-specific operation (fetch a PR + diff, read prior review

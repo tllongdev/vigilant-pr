@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Vigilant PR review engine.
 
 Ported from the production knowledge-substrate reviewer with behavior preserved:

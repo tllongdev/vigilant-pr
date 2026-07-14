@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """GitHub review-request watcher.
 
 Polls for open PRs where the running user has been requested as a reviewer and

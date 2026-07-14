@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Model profiles and runtime configuration for Vigilant PR.
 
 This module has no internal dependencies so both `identity` and `review` can
