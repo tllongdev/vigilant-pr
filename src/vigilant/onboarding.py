@@ -118,7 +118,7 @@ def _choose_provider() -> ProviderChoice | str | None:
         print(f"  {i}. {pc.label}  ({tag}){have}")
     n = len(PROVIDER_CATALOG)
     print(f"  {n + 1}. Local model via Ollama (no key)")
-    print(f"  {n + 2}. Corporate AI gateway (OpenAI-compatible; static key or OAuth2)")
+    print(f"  {n + 2}. AI gateway (OpenAI-compatible endpoint; static key or OAuth2)")
     choice = _prompt("\nEnter a number", "1")
     try:
         idx = int(choice)
@@ -225,7 +225,7 @@ def add_gateway_flow() -> str | None:
         )
         return None
 
-    print("\nCorporate AI gateway - any OpenAI-compatible endpoint behind your org's proxy.")
+    print("\nAI gateway - any OpenAI-compatible endpoint behind an AI/LLM gateway or proxy.")
     model_name = _prompt("Model name as the gateway exposes it (e.g. deepseek-v4-pro)")
     if not model_name:
         print("No model name; nothing stored.")

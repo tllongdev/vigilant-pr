@@ -14,10 +14,12 @@ A model is selected with a `provider/model` string (e.g. `groq/llama-3.3-70b-ver
 provider prefix is treated as Anthropic for backward compatibility, so bare
 Anthropic ids like `claude-sonnet-5` / `claude-opus-4-8` keep working unchanged.
 
-The `gateway` provider targets any OpenAI-compatible endpoint fronted by a
-corporate AI gateway. It authenticates with either a static bearer token or an
-OAuth2 client-credentials grant (fetch, cache, refresh) - both configured purely
-through the environment, so it stays vendor-neutral (no gateway is named in code).
+The `gateway` provider targets any OpenAI-compatible endpoint fronted by an AI
+gateway or LLM proxy (LiteLLM, Portkey, Cloudflare AI Gateway, an internal
+enterprise gateway, etc.). It authenticates with either a static bearer token or
+an OAuth2 client-credentials grant (fetch, cache, refresh) - both configured
+purely through the environment, so it stays vendor-neutral (no gateway is named
+in code).
 
 Everything here is stdlib-only (urllib) - no litellm, no SDKs - so the engine
 stays dependency-free and the container stays small.
@@ -69,7 +71,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     # VIGILANT_API_BASE; key optional via VIGILANT_API_KEY.
     "openai_compatible": {"style": "openai", "key_env": "VIGILANT_API_KEY",
                           "base": None, "json_mode": False},
-    # Corporate AI gateway (any OpenAI-compatible endpoint behind an org proxy).
+    # AI gateway / LLM proxy (any OpenAI-compatible endpoint behind a gateway).
     # Requires VIGILANT_API_BASE; auth is either a static bearer (VIGILANT_API_KEY)
     # or an OAuth2 client-credentials grant (VIGILANT_OAUTH_* - see get_gateway_bearer).
     # Deliberately vendor-neutral: the endpoint and credentials come entirely from
@@ -173,8 +175,8 @@ def base_url(provider: str, config: Config) -> str | None:
 
 
 # --- Gateway / OAuth2 client-credentials auth --------------------------------
-# The `gateway` provider points at any OpenAI-compatible endpoint fronted by a
-# corporate AI gateway. Auth is either a static bearer (VIGILANT_API_KEY) or an
+# The `gateway` provider points at any OpenAI-compatible endpoint fronted by an
+# AI gateway or LLM proxy. Auth is either a static bearer (VIGILANT_API_KEY) or an
 # OAuth2 client-credentials grant (RFC 6749 section 4.4): set
 # VIGILANT_OAUTH_TOKEN_URL plus VIGILANT_OAUTH_CLIENT_ID / VIGILANT_OAUTH_CLIENT_SECRET
 # and the gateway mints short-lived tokens. This is intentionally generic - no
