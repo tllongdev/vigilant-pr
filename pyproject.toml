@@ -1,11 +1,11 @@
 [project]
 name = "vigilant-pr"
-version = "1.2.0"
+version = "1.3.0"
 description = "Vigilant PR - a portable, workflow-agnostic AI PR reviewer that posts on behalf of you."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
-authors = [{ name = "LongIntel", email = "hello@longintel.co" }]
+license = { text = "Apache-2.0" }
+authors = [{ name = "Timothy Long", email = "hello@longintel.co" }]
 keywords = ["pull-request", "code-review", "ai", "github", "cli"]
 # Core engine is intentionally dependency-free (stdlib only). Runtime needs the
 # `gh` CLI on PATH and an ANTHROPIC_API_KEY in the environment.

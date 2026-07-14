@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Interactive first-run setup (`vigilant init`).
 
 Goal: get a brand-new user from "just installed" to "reviewing PRs" in under a

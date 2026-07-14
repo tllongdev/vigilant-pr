@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Shared engine exceptions.
 
 Kept in its own module so both `providers` and `review` can raise/catch the same

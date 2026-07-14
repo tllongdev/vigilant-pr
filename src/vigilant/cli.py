@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Vigilant PR command-line interface.
 
     vigilant init                       # guided setup: connect GitHub, store a model key

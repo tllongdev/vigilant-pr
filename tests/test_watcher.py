@@ -120,14 +120,14 @@ def test_load_seen_tolerates_corrupt_file(tmp_path) -> None:  # type: ignore[no-
 def test_already_reviewed_true_when_marker_matches_head(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(watcher, "fetch_last_bot_review_sha", lambda repo, num: "deadbeef")
+    monkeypatch.setattr(watcher._HOST, "last_review_sha", lambda repo, num: "deadbeef")
     assert watcher.already_reviewed("acme/widget", 12, "deadbeef", tmp_path / "seen.json") is True
 
 
 def test_already_reviewed_true_from_seen_cache(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(watcher, "fetch_last_bot_review_sha", lambda repo, num: None)
+    monkeypatch.setattr(watcher._HOST, "last_review_sha", lambda repo, num: None)
     path = tmp_path / "seen.json"
     watcher._record_seen(watcher._seen_key("acme/widget", 12, "cafe"), path)
     assert watcher.already_reviewed("acme/widget", 12, "cafe", path) is True
@@ -136,7 +136,7 @@ def test_already_reviewed_true_from_seen_cache(
 def test_already_reviewed_false_for_new_head(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(watcher, "fetch_last_bot_review_sha", lambda repo, num: "oldsha")
+    monkeypatch.setattr(watcher._HOST, "last_review_sha", lambda repo, num: "oldsha")
     assert watcher.already_reviewed("acme/widget", 12, "newsha", tmp_path / "seen.json") is False
 
 

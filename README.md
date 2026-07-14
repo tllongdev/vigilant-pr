@@ -168,7 +168,33 @@ providers, local servers, and gateways work out of the box.
 | An xAI **Grok** key (not Groq) | `xai/grok-4.5` | `XAI_API_KEY` |
 | A local model (Ollama) | `ollama/qwen2.5:14b` | `VIGILANT_API_BASE=http://localhost:11434/v1` if not default |
 | Any OpenAI-compatible server (vLLM, LM Studio, TGI) | `openai_compatible/<model>` | `VIGILANT_API_BASE`, `VIGILANT_API_KEY` (if required) |
+| A corporate AI gateway | `gateway/<model>` | `VIGILANT_API_BASE` + auth (see below) |
 | Just want to see it run | `mock` | nothing (scripted output, no key, no cost) |
+
+### Corporate AI gateway
+
+If your org fronts models through an internal, OpenAI-compatible gateway (for
+centrally-managed, lower-cost access), point Vigilant at it with the `gateway`
+provider. Set the model and base URL, then pick one auth mode. It's fully
+vendor-neutral - no gateway is named in code, you just supply the endpoint and
+credentials.
+
+```bash
+export VIGILANT_MODEL=gateway/your-model-name
+export VIGILANT_API_BASE=https://gateway.example.com/v1
+
+# Auth A: a static bearer token
+export VIGILANT_API_KEY=...
+
+# Auth B: OAuth2 client-credentials (token is fetched, cached, and auto-refreshed)
+export VIGILANT_OAUTH_TOKEN_URL=https://auth.example.com/oauth/token
+export VIGILANT_OAUTH_CLIENT_ID=...
+export VIGILANT_OAUTH_CLIENT_SECRET=...
+# optional:
+export VIGILANT_OAUTH_SCOPE=...        # scope, if your IdP requires one
+export VIGILANT_OAUTH_AUDIENCE=...     # audience, if your IdP requires one
+export VIGILANT_OAUTH_AUTH_STYLE=basic # send client id/secret as HTTP Basic (default: body)
+```
 
 Free tiers get you started in ~2 minutes:
 
@@ -359,6 +385,14 @@ Brand assets live in [`assets/`](assets):
 The mark is a watchful eye whose iris is a scanner aperture. Palette: `#4da3ff`
 (blue) to `#a98bff` (violet) on `#0b0f1a` ink.
 
-## License
+## License & trademarks
 
-MIT (c) LongIntel
+Vigilant PR is licensed under the Apache License 2.0 - see [LICENSE](LICENSE)
+and [NOTICE](NOTICE). Copyright (c) 2026 Timothy Long / LongIntel.
+
+"Vigilant PR" and the Vigilant PR logo are trademarks of LongIntel. The license
+covers the source code; it does not grant rights to the name or logo. You're
+welcome to build on the code under Apache-2.0, but forks and derivatives must
+use their own name and branding.
+
+Contributions are accepted under the terms in [CONTRIBUTING.md](CONTRIBUTING.md).

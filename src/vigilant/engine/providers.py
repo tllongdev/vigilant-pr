@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Model-agnostic inference layer.
 
 Vigilant PR runs against any model reachable over one of two wire protocols:
@@ -12,18 +14,25 @@ A model is selected with a `provider/model` string (e.g. `groq/llama-3.3-70b-ver
 provider prefix is treated as Anthropic for backward compatibility, so bare
 Anthropic ids like `claude-sonnet-5` / `claude-opus-4-8` keep working unchanged.
 
+The `gateway` provider targets any OpenAI-compatible endpoint fronted by a
+corporate AI gateway. It authenticates with either a static bearer token or an
+OAuth2 client-credentials grant (fetch, cache, refresh) - both configured purely
+through the environment, so it stays vendor-neutral (no gateway is named in code).
+
 Everything here is stdlib-only (urllib) - no litellm, no SDKs - so the engine
 stays dependency-free and the container stays small.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import random
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -60,6 +69,13 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     # VIGILANT_API_BASE; key optional via VIGILANT_API_KEY.
     "openai_compatible": {"style": "openai", "key_env": "VIGILANT_API_KEY",
                           "base": None, "json_mode": False},
+    # Corporate AI gateway (any OpenAI-compatible endpoint behind an org proxy).
+    # Requires VIGILANT_API_BASE; auth is either a static bearer (VIGILANT_API_KEY)
+    # or an OAuth2 client-credentials grant (VIGILANT_OAUTH_* - see get_gateway_bearer).
+    # Deliberately vendor-neutral: the endpoint and credentials come entirely from
+    # the environment, so it works with any gateway without naming one.
+    "gateway": {"style": "openai", "key_env": "VIGILANT_API_KEY",
+                "base": None, "json_mode": False},
     "mock": {"style": "mock", "key_env": None, "base": None, "json_mode": False},
 }
 
@@ -99,6 +115,8 @@ def model_key_missing(config: Config) -> str | None:
     provider, _ = resolve_provider(config.model)
     if provider in ("mock", "ollama"):
         return None
+    if provider == "gateway":
+        return None if gateway_auth_configured() else missing_key_message("gateway")
     if provider_api_key(provider):
         return None
     return missing_key_message(provider)
@@ -154,6 +172,110 @@ def base_url(provider: str, config: Config) -> str | None:
     return PROVIDERS.get(provider, {}).get("base")
 
 
+# --- Gateway / OAuth2 client-credentials auth --------------------------------
+# The `gateway` provider points at any OpenAI-compatible endpoint fronted by a
+# corporate AI gateway. Auth is either a static bearer (VIGILANT_API_KEY) or an
+# OAuth2 client-credentials grant (RFC 6749 section 4.4): set
+# VIGILANT_OAUTH_TOKEN_URL plus VIGILANT_OAUTH_CLIENT_ID / VIGILANT_OAUTH_CLIENT_SECRET
+# and the gateway mints short-lived tokens. This is intentionally generic - no
+# provider is named or hardcoded; endpoint and credentials come from the env, so
+# a user points it at their gateway purely through configuration.
+_OAUTH_TOKEN_CACHE: dict[tuple[str, str], tuple[str, float]] = {}
+
+
+def gateway_auth_configured() -> bool:
+    """True if the gateway has usable auth configured (no network call).
+
+    Either a static bearer (VIGILANT_API_KEY) or a full OAuth2 client-credentials
+    triple (token URL + client id + secret) counts as configured.
+    """
+    if os.environ.get("VIGILANT_API_KEY"):
+        return True
+    return bool(
+        os.environ.get("VIGILANT_OAUTH_TOKEN_URL")
+        and os.environ.get("VIGILANT_OAUTH_CLIENT_ID")
+        and os.environ.get("VIGILANT_OAUTH_CLIENT_SECRET")
+    )
+
+
+def _fetch_oauth_token(
+    token_url: str,
+    client_id: str,
+    client_secret: str,
+    scope: str | None,
+    audience: str | None,
+    auth_style: str,
+) -> tuple[str, float]:
+    """Run the OAuth2 client-credentials grant; return (access_token, expires_in_seconds).
+
+    Sends credentials in the form body by default; set auth_style="basic" to send
+    them as an HTTP Basic header instead (some token endpoints require that).
+    """
+    form: dict[str, str] = {"grant_type": "client_credentials"}
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+    }
+    if auth_style == "basic":
+        creds = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+        headers["Authorization"] = f"Basic {creds}"
+    else:
+        form["client_id"] = client_id
+        form["client_secret"] = client_secret
+    if scope:
+        form["scope"] = scope
+    if audience:
+        form["audience"] = audience
+    body = urllib.parse.urlencode(form).encode("utf-8")
+    req = urllib.request.Request(token_url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data: dict[str, Any] = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, json.JSONDecodeError) as e:
+        raise ReviewFailedError(f"Gateway OAuth token request failed: {e}", exit_code=1) from e
+    token = data.get("access_token")
+    if not token:
+        raise ReviewFailedError("Gateway OAuth response had no access_token.", exit_code=1)
+    expires_in = float(data.get("expires_in", 3600) or 3600)
+    return str(token), expires_in
+
+
+def get_gateway_bearer(config: Config) -> str | None:
+    """Resolve the bearer token for the `gateway` provider.
+
+    Uses the OAuth2 client-credentials grant when VIGILANT_OAUTH_TOKEN_URL is set
+    (caching the token until shortly before expiry), otherwise falls back to a
+    static VIGILANT_API_KEY. Returns None when nothing is configured; raises
+    ReviewFailedError if an OAuth exchange is configured but fails.
+    """
+    token_url = os.environ.get("VIGILANT_OAUTH_TOKEN_URL")
+    if not token_url:
+        return os.environ.get("VIGILANT_API_KEY")
+
+    client_id = os.environ.get("VIGILANT_OAUTH_CLIENT_ID")
+    client_secret = os.environ.get("VIGILANT_OAUTH_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        # Token URL given but no credentials: fall back to a static key if present.
+        return os.environ.get("VIGILANT_API_KEY")
+
+    now = time.time()
+    cache_key = (token_url, client_id)
+    cached = _OAUTH_TOKEN_CACHE.get(cache_key)
+    if cached and cached[1] - 60 > now:
+        return cached[0]
+
+    token, expires_in = _fetch_oauth_token(
+        token_url,
+        client_id,
+        client_secret,
+        os.environ.get("VIGILANT_OAUTH_SCOPE"),
+        os.environ.get("VIGILANT_OAUTH_AUDIENCE"),
+        os.environ.get("VIGILANT_OAUTH_AUTH_STYLE", "body").lower(),
+    )
+    _OAUTH_TOKEN_CACHE[cache_key] = (token, now + expires_in)
+    return token
+
+
 def missing_key_message(provider: str) -> str:
     """A helpful, actionable message when the provider's key is absent."""
     key_env = PROVIDERS.get(provider, {}).get("key_env") or "(none)"
@@ -165,6 +287,11 @@ def missing_key_message(provider: str) -> str:
         "openai": "https://platform.openai.com/api-keys",
         "openrouter": "https://openrouter.ai/keys",
         "openai_compatible": "Set VIGILANT_API_BASE (and VIGILANT_API_KEY if required).",
+        "gateway": (
+            "Set VIGILANT_API_BASE, then either VIGILANT_API_KEY (static token) or "
+            "VIGILANT_OAUTH_TOKEN_URL + VIGILANT_OAUTH_CLIENT_ID/SECRET (OAuth2 "
+            "client-credentials)."
+        ),
     }
     hint = hints.get(provider, "")
     return f"{key_env} is not set for provider '{provider}'. {hint}".strip()
@@ -298,6 +425,9 @@ def call_model(system: str, user: str, config: Config) -> str:
         raise ReviewFailedError(
             f"No API base for provider '{provider}'. Set VIGILANT_API_BASE.", exit_code=1
         )
+    if provider == "gateway":
+        # Static bearer or a freshly minted/cached OAuth2 client-credentials token.
+        api_key = get_gateway_bearer(config)
     if provider_needs_key(provider) and not api_key:
         raise ReviewFailedError(missing_key_message(provider), exit_code=1)
     json_mode = bool(PROVIDERS.get(provider, {}).get("json_mode"))
@@ -379,6 +509,11 @@ def list_models(provider: str, config: Config) -> list[str]:
             return [m.get("id", "") for m in data.get("data", []) if m.get("id")]
         if style == "openai":
             base = base_url(provider, config)
+            if provider == "gateway":
+                try:
+                    api_key = get_gateway_bearer(config)
+                except ReviewFailedError:
+                    return []
             if not base or (provider_needs_key(provider) and not api_key):
                 return []
             headers = {}

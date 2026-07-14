@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / LongIntel
+# SPDX-License-Identifier: Apache-2.0
 """Managed credential store for Vigilant PR (stdlib only).
 
 Lets a user save one or more provider API keys and switch between them without
