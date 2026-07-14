@@ -1,4 +1,4 @@
-# Copyright 2026 Timothy Long / LongIntel
+# Copyright 2026 Timothy Long / Longitudinal Intelligence Technologies (LIT)
 # SPDX-License-Identifier: Apache-2.0
 """Slack token acquisition with automatic refresh.
 

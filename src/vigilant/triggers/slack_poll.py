@@ -1,4 +1,4 @@
-# Copyright 2026 Timothy Long / LongIntel
+# Copyright 2026 Timothy Long / Longitudinal Intelligence Technologies (LIT)
 # SPDX-License-Identifier: Apache-2.0
 """Poll-based Slack monitor (no Slack app, no admin approval) - the only Slack
 surface Vigilant PR ships, on purpose: it needs zero workspace setup.

@@ -10,7 +10,7 @@ contribution (a pull request, patch, or any other material) you agree that:
 
 - Your contribution is provided under the Apache License 2.0
   (inbound = outbound).
-- You also grant Timothy Long / LongIntel (the maintainer) a perpetual,
+- You also grant Timothy Long / Longitudinal Intelligence Technologies (LIT) (the maintainer) a perpetual,
   worldwide, non-exclusive, royalty-free, irrevocable license to use,
   reproduce, modify, sublicense, and **relicense** your contribution,
   including as part of a commercial or dual-licensed offering. This keeps the
