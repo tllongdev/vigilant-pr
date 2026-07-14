@@ -51,6 +51,8 @@ PROVIDER_CATALOG: tuple[ProviderChoice, ...] = (
                    False),
     ProviderChoice("openai", "OpenAI GPT (paid)", "OPENAI_API_KEY",
                    "openai/gpt-5.5", "https://platform.openai.com/api-keys", False),
+    ProviderChoice("xai", "xAI Grok (paid)", "XAI_API_KEY",
+                   "xai/grok-4.5", "https://console.x.ai", False),
     ProviderChoice("openrouter", "OpenRouter (many models, paid)", "OPENROUTER_API_KEY",
                    "openrouter/meta-llama/llama-3.3-70b-instruct", "https://openrouter.ai/keys",
                    False),

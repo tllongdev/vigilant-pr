@@ -280,6 +280,7 @@ _EXAMPLE_MODELS = {
     "gemini": "gemini/gemini-2.5-flash",
     "nvidia_nim": "nvidia_nim/deepseek-ai/deepseek-v3.2-exp",
     "openrouter": "openrouter/meta-llama/llama-3.3-70b-instruct",
+    "xai": "xai/grok-4.5",
     "ollama": "ollama/qwen2.5:14b",
     "openai_compatible": "openai_compatible/<model> (set VIGILANT_API_BASE)",
 }

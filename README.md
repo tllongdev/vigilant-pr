@@ -41,8 +41,8 @@ flowchart LR
 **v1 - ready to use** for reviewing GitHub pull requests.
 
 **Use any AI model you want.** Give Vigilant PR an API key for your preferred
-provider and it uses that model - Claude, GPT, Gemini, Grok, Llama, NVIDIA,
-OpenRouter, or a model you run locally. Some are free, some paid - your choice.
+provider and it uses that model - Claude, GPT, Gemini, Grok (xAI), Llama,
+NVIDIA, OpenRouter, or a model you run locally. Some are free, some paid - your choice.
 You just set your key and pick a model (or run `vigilant init`, which does it
 for you). See [Models](#models) for the exact options.
 
@@ -165,6 +165,7 @@ providers, local servers, and gateways work out of the box.
 | A Claude / Anthropic key (best results) | `anthropic/claude-sonnet-5` (or `-opus-4-8`) | `ANTHROPIC_API_KEY` |
 | An OpenAI key | `openai/gpt-5.5` | `OPENAI_API_KEY` |
 | An OpenRouter key | `openrouter/meta-llama/llama-3.3-70b-instruct` | `OPENROUTER_API_KEY` |
+| An xAI **Grok** key (not Groq) | `xai/grok-4.5` | `XAI_API_KEY` |
 | A local model (Ollama) | `ollama/qwen2.5:14b` | `VIGILANT_API_BASE=http://localhost:11434/v1` if not default |
 | Any OpenAI-compatible server (vLLM, LM Studio, TGI) | `openai_compatible/<model>` | `VIGILANT_API_BASE`, `VIGILANT_API_KEY` (if required) |
 | Just want to see it run | `mock` | nothing (scripted output, no key, no cost) |
