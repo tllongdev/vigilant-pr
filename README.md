@@ -85,7 +85,7 @@ prints which model it chose.
 ## Install
 
 ```bash
-pipx install git+https://github.com/tllongdev/vigilant-pr@v1.0.0
+pipx install git+https://github.com/tllongdev/vigilant-pr@v1.1.0
 # or track the latest development version:
 pipx install git+https://github.com/tllongdev/vigilant-pr
 # or, from a clone:
@@ -97,7 +97,7 @@ uv tool install .
 From zero to auto-reviewing PRs as you, in three commands:
 
 ```bash
-pipx install git+https://github.com/tllongdev/vigilant-pr@v1.0.0
+pipx install git+https://github.com/tllongdev/vigilant-pr@v1.1.0
 vigilant init      # connects GitHub, picks + stores a model key (free options first)
 vigilant github-watch   # auto-reviews any open PR where you're a requested reviewer
 ```
