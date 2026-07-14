@@ -205,8 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     model_add_p.add_argument(
         "provider", nargs="?",
-        help="Provider id (groq, gemini, nvidia_nim, anthropic, openai, openrouter, ollama). "
-             "Omit to choose interactively.",
+        help="Provider id (groq, gemini, nvidia_nim, anthropic, openai, openrouter, ollama, "
+             "gateway). 'gateway' walks you through a corporate AI gateway (base URL + static "
+             "key or OAuth2). Omit to choose interactively.",
     )
     model_sub.add_parser("list", help="List stored providers and the active model.")
     model_use_p = model_sub.add_parser("use", help="Switch the active model.")
