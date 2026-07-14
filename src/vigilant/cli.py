@@ -90,11 +90,40 @@ def _add_model_flags(sub: argparse.ArgumentParser) -> None:
     sub.add_argument("--sonnet", action="store_true", help=f"Shortcut for --model {SONNET_MODEL}.")
 
 
+def _add_output_flags(sub: argparse.ArgumentParser) -> None:
+    """Flags controlling what gets posted: attribution footnote and approval gate."""
+    sub.add_argument(
+        "--no-attribution", action="store_true",
+        help="Do not append the visible 'AI-assisted review' footnote (on by default).",
+    )
+    sub.add_argument(
+        "--approve", action="store_true",
+        help="Preview the review and ask before posting (good while trying a new model).",
+    )
+    sub.add_argument(
+        "--no-approve", action="store_true",
+        help="Post without asking, overriding VIGILANT_REQUIRE_APPROVAL.",
+    )
+
+
+def _approval_override(args: argparse.Namespace) -> bool | None:
+    """Resolve --approve/--no-approve into a Config override (None = defer to env)."""
+    if getattr(args, "approve", False) and getattr(args, "no_approve", False):
+        sys.stderr.write("Cannot pass both --approve and --no-approve.\n")
+        sys.exit(1)
+    if getattr(args, "approve", False):
+        return True
+    if getattr(args, "no_approve", False):
+        return False
+    return None
+
+
 def _add_common_flags(sub: argparse.ArgumentParser) -> None:
     sub.add_argument("pr", help="PR number or full GitHub PR URL")
     sub.add_argument("--repo", help="Repo as OWNER/REPO. Defaults to the current dir's gh repo.")
     sub.add_argument("--dry-run", action="store_true", help="Print the review; do not post.")
     _add_model_flags(sub)
+    _add_output_flags(sub)
 
 
 def _effective_model(args: argparse.Namespace) -> str | None:
@@ -151,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     watch_p.add_argument("--poll-interval", type=int, help="Seconds between polls (default 120).")
     watch_p.add_argument("--daily-cap", type=int, help="Max reviews per UTC day (default 50).")
     _add_model_flags(watch_p)
+    _add_output_flags(watch_p)
 
     slack_watch_p = subparsers.add_parser(
         "slack-watch",
@@ -243,6 +273,8 @@ def main(argv: list[str] | None = None) -> int:
         handle=args.handle,
         poll_interval=getattr(args, "poll_interval", None),
         daily_cap=getattr(args, "daily_cap", None),
+        attribution=False if getattr(args, "no_attribution", False) else None,
+        require_approval=_approval_override(args),
     )
 
     if args.command == "review":

@@ -40,6 +40,25 @@ def build_signature(model: str, handle: str | None = None) -> str:
     return f"{SIG_MARKER}: AI-assisted first-pass; model={model_str}{who} -->"
 
 
+REPO_URL = "https://github.com/tllongdev/vigilant-pr"
+
+
+def build_footnote(model: str, handle: str | None = None) -> str:
+    """Build the short, VISIBLE attribution footnote for a posted review.
+
+    Unlike the hidden marker, this renders on GitHub: a thin rule plus a small,
+    grey `<sub>` line disclosing the review was AI-assisted, which model produced
+    it, and who it was posted on behalf of. Kept quiet so it reads as a signature,
+    not a banner. Controlled by Config.attribution (on by default).
+    """
+    who = f" \u00b7 posted by @{handle}" if handle else ""
+    return (
+        "---\n"
+        f"<sub>\U0001f6e1\ufe0f AI-assisted review via [Vigilant PR]({REPO_URL}) "
+        f"\u00b7 {model}{who}</sub>"
+    )
+
+
 def is_signed_comment(body: str) -> bool:
     """True if `body` was authored by Vigilant PR (or a legacy signed reviewer)."""
     return any(prefix in body for prefix in SIGNATURE_PREFIXES)
