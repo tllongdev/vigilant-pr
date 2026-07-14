@@ -676,21 +676,24 @@ def post_failure_comment(repo: str, pr_number: int, reason: str, model: str) -> 
 
 def run_threads_only(target: str, config: Config) -> int:
     """Lightweight mode: validate human replies to prior AI comments only."""
+    from .hosts import resolve_host
+
     key_problem = model_key_missing(config)
     if key_problem:
         sys.stderr.write(key_problem + "\n")
         return 1
 
+    host = resolve_host(target)
     pr_number, url_repo = parse_pr_arg(target)
-    repo = config.repo or url_repo or detect_repo()
+    repo = config.repo or url_repo or host.detect_repo()
     handle = resolve_handle(config.handle)
     sig = build_signature(config.model, handle)
 
     sys.stderr.write(f"Fetching PR #{pr_number} in {repo}...\n")
-    pr = fetch_pr(repo, pr_number)
+    pr = host.fetch_pr(repo, pr_number)
 
     sys.stderr.write("Threads-only mode: fetching prior AI review threads...\n")
-    prior_threads = fetch_prior_threads(repo, pr_number)
+    prior_threads = host.fetch_prior_threads(repo, pr_number)
     if not prior_threads:
         sys.stderr.write("No prior threads with human replies found. Nothing to validate.\n")
         return 0
@@ -701,8 +704,8 @@ def run_threads_only(target: str, config: Config) -> int:
     user_prompt = THREADS_ONLY_USER_TEMPLATE.format(
         pr_number=pr_number,
         repo=repo,
-        title=pr.get("title", ""),
-        head=pr.get("headRefName", ""),
+        title=pr.title,
+        head=pr.head,
         thread_context=thread_context,
     )
 
@@ -733,7 +736,7 @@ def run_threads_only(target: str, config: Config) -> int:
         return 0
 
     sys.stderr.write(f"Posting {len(thread_responses)} thread response(s)...\n")
-    posted = post_thread_responses(repo, pr_number, thread_responses, sig)
+    posted = host.post_thread_responses(repo, pr_number, thread_responses, sig)
     sys.stderr.write(f"Posted {posted}/{len(thread_responses)} thread responses\n")
     return 0
 
@@ -744,6 +747,8 @@ def run_review(target: str, config: Config) -> int:
     Returns a process-style exit code: 0 success, 1 config error, 2 Anthropic
     error, 3 GitHub error (the latter raised via util.run -> sys.exit).
     """
+    from .hosts import resolve_host
+
     model = config.model
     profile = MODEL_PROFILES.get(model, GENERIC_PROFILE)
 
@@ -752,31 +757,32 @@ def run_review(target: str, config: Config) -> int:
         sys.stderr.write(key_problem + "\n")
         return 1
 
+    host = resolve_host(target)
     pr_number, url_repo = parse_pr_arg(target)
-    repo = config.repo or url_repo or detect_repo()
+    repo = config.repo or url_repo or host.detect_repo()
     handle = resolve_handle(config.handle)
     sig = build_signature(model, handle)
 
     sys.stderr.write(f"Fetching PR #{pr_number} in {repo}...\n")
-    pr = fetch_pr(repo, pr_number)
+    pr = host.fetch_pr(repo, pr_number)
 
-    if pr.get("isDraft"):
+    if pr.is_draft:
         sys.stderr.write("PR is a draft. Continuing anyway (explicit invocation).\n")
 
     sys.stderr.write("Reading repo guidance files...\n")
-    guidance = read_guidance(repo, pr["headRefOid"])
+    guidance = host.read_guidance(repo, pr.head_sha)
 
     # Re-review state: what SHA we last reviewed, and every finding already raised.
-    head_sha = pr["headRefOid"]
-    last_reviewed_sha = fetch_last_bot_review_sha(repo, pr_number)
-    prior_sigs = fetch_prior_finding_signatures(repo, pr_number)
+    head_sha = pr.head_sha
+    last_reviewed_sha = host.last_review_sha(repo, pr_number)
+    prior_sigs = host.prior_finding_signatures(repo, pr_number)
     is_rerun = bool(last_reviewed_sha) or bool(prior_sigs)
 
     review_scope_note = ""
     if last_reviewed_sha and last_reviewed_sha != head_sha:
-        incr = get_incremental_diff(repo, last_reviewed_sha, head_sha)
+        incr = host.incremental_diff(repo, last_reviewed_sha, head_sha)
         if incr:
-            pr["diff"] = incr
+            pr.diff = incr
             review_scope_note = (
                 "\nNOTE: This is an INCREMENTAL diff containing only changes since the last "
                 f"review (commit {last_reviewed_sha[:7]}). Review only these changes; do not "
@@ -785,7 +791,7 @@ def run_review(target: str, config: Config) -> int:
             sys.stderr.write(f"Incremental review: diff since {last_reviewed_sha[:7]}\n")
 
     sys.stderr.write("Fetching prior AI review threads...\n")
-    prior_threads = fetch_prior_threads(repo, pr_number)
+    prior_threads = host.fetch_prior_threads(repo, pr_number)
     thread_context = format_thread_context(prior_threads)
     if prior_threads:
         sys.stderr.write(f"Found {len(prior_threads)} prior thread(s) with human replies\n")
@@ -801,15 +807,15 @@ def run_review(target: str, config: Config) -> int:
         pr_number=pr_number,
         repo=repo,
         today=datetime.now(UTC).date().isoformat(),
-        title=pr.get("title", ""),
-        body=pr.get("body", "") or "(empty)",
-        base=pr.get("baseRefName", ""),
-        head=pr.get("headRefName", ""),
-        head_sha=pr.get("headRefOid", ""),
-        file_count=pr.get("changedFiles", 0),
+        title=pr.title,
+        body=pr.body or "(empty)",
+        base=pr.base,
+        head=pr.head,
+        head_sha=pr.head_sha,
+        file_count=pr.changed_files,
         review_scope_note=review_scope_note,
         guidance=guidance,
-        diff=pr["diff"],
+        diff=pr.diff,
         prior_threads_section=prior_threads_section,
     )
 
@@ -822,7 +828,7 @@ def run_review(target: str, config: Config) -> int:
         review = parse_review_json(raw)
     except ReviewFailedError as e:
         if not config.dry_run:
-            post_failure_comment(repo, pr_number, e.reason, model)
+            host.post_failure_comment(repo, pr_number, e.reason, model)
         return e.exit_code
 
     raw_findings = [
@@ -860,7 +866,7 @@ def run_review(target: str, config: Config) -> int:
                 f"Re-review ratchet: suppressed {ratcheted} finding(s) below [{kept}].\n"
             )
 
-    valid_lines = parse_diff_lines(pr["diff"])
+    valid_lines = parse_diff_lines(pr.diff)
     in_diff_findings, dropped_findings = filter_to_diff_lines(raw_findings, valid_lines)
     if dropped_findings:
         sys.stderr.write(
@@ -927,12 +933,12 @@ def run_review(target: str, config: Config) -> int:
     sys.stderr.write(
         f"Posting {event} review with {len(findings)} inline comments (model: {model})...\n"
     )
-    url = post_review(repo, pr_number, pr["headRefOid"], body, event, findings, sig)
+    url = host.post_review(repo, pr_number, head_sha, body, event, findings, sig)
     sys.stderr.write(f"Posted: {url}\n")
 
     if thread_responses:
         sys.stderr.write(f"Posting {len(thread_responses)} thread response(s)...\n")
-        posted = post_thread_responses(repo, pr_number, thread_responses, sig)
+        posted = host.post_thread_responses(repo, pr_number, thread_responses, sig)
         sys.stderr.write(f"Posted {posted}/{len(thread_responses)} thread responses\n")
 
     return 0
