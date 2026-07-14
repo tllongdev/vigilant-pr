@@ -1,6 +1,6 @@
 [project]
 name = "vigilant-pr"
-version = "1.0.0"
+version = "1.1.0"
 description = "Vigilant PR - a portable, workflow-agnostic AI PR reviewer that posts on behalf of you."
 readme = "README.md"
 requires-python = ">=3.12"
