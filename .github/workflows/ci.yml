@@ -1,11 +1,13 @@
 name: CI
 
-# Lint, type-check, and test on every push to main and every PR. Mirrors the
-# local `ruff check` / `mypy` / `pytest` gate so contributors see green checks.
+# Lint, type-check, and test on every push to main/develop and every PR.
+# Mirrors the local `ruff check` / `mypy` / `pytest` gate so contributors see
+# green checks. main is the protected release line; develop is the integration
+# branch, and PRs promote develop -> main.
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
   workflow_dispatch:
 

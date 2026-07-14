@@ -85,19 +85,22 @@ prints which model it chose.
 ## Install
 
 ```bash
-pipx install git+https://github.com/tllongdev/vigilant-pr@v1.1.0
-# or track the latest development version:
 pipx install git+https://github.com/tllongdev/vigilant-pr
+# or pin a specific release:
+pipx install git+https://github.com/tllongdev/vigilant-pr@v1.1.0
 # or, from a clone:
 uv tool install .
 ```
+
+`main` is the stable release line, so the unpinned command always gets the
+latest release.
 
 ## Fastest start (GitHub)
 
 From zero to auto-reviewing PRs as you, in three commands:
 
 ```bash
-pipx install git+https://github.com/tllongdev/vigilant-pr@v1.1.0
+pipx install git+https://github.com/tllongdev/vigilant-pr
 vigilant init      # connects GitHub, picks + stores a model key (free options first)
 vigilant github-watch   # auto-reviews any open PR where you're a requested reviewer
 ```
@@ -261,7 +264,8 @@ Slack expires it**, so a long-running monitor never dies on an expired session.
 This needs the optional refresh extra (one-time):
 
 ```bash
-pipx install 'vigilant-pr[slack-refresh]'   # or: pip install 'vigilant-pr[slack-refresh]'
+pipx install 'vigilant-pr[slack-refresh] @ git+https://github.com/tllongdev/vigilant-pr'
+# or, into an existing install: pip install 'vigilant-pr[slack-refresh] @ git+https://github.com/tllongdev/vigilant-pr'
 python -m playwright install chromium
 
 export GH_TOKEN="ghp_..."
