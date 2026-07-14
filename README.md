@@ -168,15 +168,16 @@ providers, local servers, and gateways work out of the box.
 | An xAI **Grok** key (not Groq) | `xai/grok-4.5` | `XAI_API_KEY` |
 | A local model (Ollama) | `ollama/qwen2.5:14b` | `VIGILANT_API_BASE=http://localhost:11434/v1` if not default |
 | Any OpenAI-compatible server (vLLM, LM Studio, TGI) | `openai_compatible/<model>` | `VIGILANT_API_BASE`, `VIGILANT_API_KEY` (if required) |
-| A corporate AI gateway | `gateway/<model>` | `VIGILANT_API_BASE` + auth (see below) |
+| An AI gateway / LLM proxy | `gateway/<model>` | `VIGILANT_API_BASE` + auth (see below) |
 | Just want to see it run | `mock` | nothing (scripted output, no key, no cost) |
 
-### Corporate AI gateway
+### AI gateway / LLM proxy
 
-If your org fronts models through an internal, OpenAI-compatible gateway (for
-centrally-managed, lower-cost access), point Vigilant at it with the `gateway`
-provider. It's fully vendor-neutral - no gateway is named in code, you just
-supply the endpoint and credentials.
+If your models are fronted by an OpenAI-compatible AI gateway or LLM proxy
+(LiteLLM, Portkey, Cloudflare AI Gateway, Kong, a self-hosted proxy, or an
+internal enterprise gateway - often for centrally-managed, lower-cost access),
+point Vigilant at it with the `gateway` provider. It's fully vendor-neutral - no
+gateway is named in code, you just supply the endpoint and credentials.
 
 The easiest path is the guided wizard, which prompts for the base URL and auth
 mode and saves everything to the managed credential store:
