@@ -22,22 +22,14 @@ from .config import GENERIC_PROFILE, MODEL_PROFILES, Config
 from .errors import ReviewFailedError
 from .identity import (
     build_signature,
-    is_signed_comment,
     resolve_handle,
     signature_index,
 )
 from .providers import call_model, model_key_missing
-from .util import run
 
 # On a re-review, only these severities are posted. Nits are suppressed so re-runs
 # stop drilling into style minutiae on code that already passed an earlier pass.
 RERUN_KEEP_SEVERITIES = {"critical", "medium"}
-
-# HTML-comment marker embedded in every posted review body recording the head SHA
-# the review ran against. Lets a later run scope itself to the diff since the last
-# review (incremental re-review).
-_SHA_MARKER_RE = re.compile(r"<!--\s*ai-review-sha:\s*([0-9a-f]{7,40})\s*-->")
-
 
 SYSTEM_PROMPT = """You are an adversarial code reviewer with no team history, no familiarity with the author, and no stake in the PR being merged. You assume code is wrong until proven correct.
 
@@ -175,54 +167,6 @@ class Finding:
         }.get(self.severity, self.severity.title())
 
 
-def detect_repo() -> str:
-    """Detect owner/repo from the current git directory."""
-    out = run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], check=False)
-    if not out.strip():
-        sys.stderr.write("Could not detect repo. Pass --repo OWNER/REPO explicitly.\n")
-        sys.exit(1)
-    return out.strip()
-
-
-def parse_pr_arg(arg: str) -> tuple[int, str | None]:
-    """Parse a PR number or full URL. Returns (pr_number, repo_or_None)."""
-    m = re.match(r"https?://github\.com/([^/]+/[^/]+)/pull/(\d+)", arg)
-    if m:
-        return int(m.group(2)), m.group(1)
-    if arg.isdigit():
-        return int(arg), None
-    sys.stderr.write(f"Invalid PR argument: {arg}\n")
-    sys.exit(1)
-
-
-def fetch_pr(repo: str, pr_number: int) -> dict[str, Any]:
-    """Fetch PR metadata and diff via gh."""
-    meta_json = run([
-        "gh", "pr", "view", str(pr_number),
-        "--repo", repo,
-        "--json",
-        "number,title,body,baseRefName,headRefName,headRefOid,files,additions,deletions,changedFiles,isDraft",
-    ])
-    meta: dict[str, Any] = json.loads(meta_json)
-    diff = run(["gh", "pr", "diff", str(pr_number), "--repo", repo])
-    meta["diff"] = diff
-    return meta
-
-
-def read_guidance(repo: str, head_sha: str) -> str:
-    """Read AGENTS.md, CLAUDE.md, REVIEW.md from the PR head SHA if present."""
-    parts: list[str] = []
-    for fname in ("AGENTS.md", "CLAUDE.md", "REVIEW.md"):
-        out = run(
-            ["gh", "api", f"repos/{repo}/contents/{fname}?ref={head_sha}",
-             "-H", "Accept: application/vnd.github.raw", "-q", "."],
-            check=False,
-        )
-        if out.strip() and not out.strip().startswith("{"):
-            parts.append(f"### {fname}\n\n{out.strip()}")
-    return "\n\n".join(parts) if parts else "(no AGENTS.md / CLAUDE.md / REVIEW.md at repo root)"
-
-
 @dataclass
 class PriorThread:
     """A prior bot review comment and any human replies."""
@@ -234,77 +178,6 @@ class PriorThread:
     title: str
     bot_body: str
     replies: list[dict[str, str]]
-
-
-def fetch_prior_threads(repo: str, pr_number: int) -> list[PriorThread]:
-    """Fetch prior AI review comments and their human reply threads.
-
-    Returns only threads that have at least one human reply.
-    """
-    raw = run(
-        ["gh", "api", f"repos/{repo}/pulls/{pr_number}/comments",
-         "--paginate", "--jq", ".[]"],
-        check=False,
-    )
-    if not raw.strip():
-        return []
-
-    comments: list[dict[str, Any]] = []
-    for line in raw.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            comments.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-
-    bot_comments: dict[int, dict[str, Any]] = {}
-    replies_by_parent: dict[int, list[dict[str, str]]] = {}
-
-    for c in comments:
-        cid = c.get("id", 0)
-        body = c.get("body", "")
-        user = c.get("user", {}).get("login", "")
-        in_reply_to = c.get("in_reply_to_id")
-
-        if is_signed_comment(body) and not in_reply_to:
-            bot_comments[cid] = c
-        elif in_reply_to and in_reply_to in bot_comments:
-            if user != "github-actions[bot]":
-                replies_by_parent.setdefault(in_reply_to, []).append({
-                    "user": user,
-                    "body": body,
-                })
-
-    threads: list[PriorThread] = []
-    for cid, c in bot_comments.items():
-        replies = replies_by_parent.get(cid, [])
-        if not replies:
-            continue
-
-        body = c.get("body", "")
-        severity = "nit"
-        title = ""
-        sev_match = re.search(
-            r"\*\*(?:\U0001f534|\U0001f7e0|\U0001f7e1)\s*(Critical|Medium|Nit)\*\*\s*-\s*(.+?)(?:\n|$)",
-            body,
-        )
-        if sev_match:
-            severity = sev_match.group(1).lower()
-            title = sev_match.group(2).strip()
-
-        threads.append(PriorThread(
-            comment_id=cid,
-            path=c.get("path", ""),
-            line=c.get("line") or c.get("original_line") or 0,
-            severity=severity,
-            title=title,
-            bot_body=body,
-            replies=replies,
-        ))
-
-    return threads
 
 
 def format_thread_context(threads: list[PriorThread]) -> str:
@@ -331,100 +204,10 @@ def format_thread_context(threads: list[PriorThread]) -> str:
     return "\n".join(parts)
 
 
-def fetch_last_bot_review_sha(repo: str, pr_number: int) -> str | None:
-    """Return the head SHA the most recent bot review ran against."""
-    raw = run(
-        ["gh", "api", f"repos/{repo}/pulls/{pr_number}/reviews",
-         "--paginate", "--jq", ".[]"],
-        check=False,
-    )
-    last_sha: str | None = None
-    for line in raw.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rv = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        body = rv.get("body", "") or ""
-        if not is_signed_comment(body):
-            continue
-        m = _SHA_MARKER_RE.search(body)
-        if m:
-            last_sha = m.group(1)  # reviews returned in chronological order
-    return last_sha
-
-
 def _norm_title(title: str) -> str:
     """Normalize a finding title for dedup: collapse whitespace, drop trailing
     period, lowercase."""
     return re.sub(r"\s+", " ", title).strip().rstrip(".").lower()
-
-
-_FINDING_TITLE_RE = re.compile(r"\*\*[^\n*][^\n]*?\*\*\s*-\s*(.+)")
-_TABLE_ROW_RE = re.compile(r"^\|[^|]*\|\s*`([^`:]+):\d+`\s*\|\s*(.+?)\s*\|\s*$")
-
-
-def fetch_prior_finding_signatures(repo: str, pr_number: int) -> set[tuple[str, str]]:
-    """Collect (path, normalized-title) signatures of every finding already posted."""
-    sigs: set[tuple[str, str]] = set()
-
-    raw = run(
-        ["gh", "api", f"repos/{repo}/pulls/{pr_number}/comments",
-         "--paginate", "--jq", ".[]"],
-        check=False,
-    )
-    for line in raw.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            c = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        body = c.get("body", "") or ""
-        if not is_signed_comment(body) or c.get("in_reply_to_id"):
-            continue
-        path = c.get("path", "")
-        m = _FINDING_TITLE_RE.search(body)
-        if path and m:
-            sigs.add((path, _norm_title(m.group(1))))
-
-    raw_reviews = run(
-        ["gh", "api", f"repos/{repo}/pulls/{pr_number}/reviews",
-         "--paginate", "--jq", ".[]"],
-        check=False,
-    )
-    for line in raw_reviews.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rv = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        body = rv.get("body", "") or ""
-        if not is_signed_comment(body):
-            continue
-        for row in body.splitlines():
-            rm = _TABLE_ROW_RE.match(row.strip())
-            if rm:
-                sigs.add((rm.group(1).strip(), _norm_title(rm.group(2))))
-
-    return sigs
-
-
-def get_incremental_diff(repo: str, base_sha: str, head_sha: str) -> str | None:
-    """Return the unified diff between two SHAs via the compare API, or None."""
-    if not base_sha or base_sha == head_sha:
-        return None
-    out = run(
-        ["gh", "api", f"repos/{repo}/compare/{base_sha}...{head_sha}",
-         "-H", "Accept: application/vnd.github.diff"],
-        check=False,
-    )
-    return out if out.strip() else None
 
 
 def parse_diff_lines(diff_text: str) -> dict[str, set[int]]:
@@ -550,52 +333,6 @@ def decide_event(
     return "COMMENT" if (blocking or reflagged) else "APPROVE"
 
 
-def post_review(
-    repo: str,
-    pr_number: int,
-    head_sha: str,
-    body: str,
-    event: str,
-    findings: list[Finding],
-    sig: str,
-) -> str:
-    """Post the review with all inline comments in a single API call."""
-    inline = []
-    for f in findings:
-        inline.append({
-            "path": f.path,
-            "line": f.line,
-            "side": "RIGHT",
-            "body": format_inline_comment(f, sig),
-        })
-    def _submit(review_event: str) -> str:
-        payload = {
-            "commit_id": head_sha,
-            "body": body,
-            "event": review_event,
-            "comments": inline,
-        }
-        out = run([
-            "gh", "api",
-            f"repos/{repo}/pulls/{pr_number}/reviews",
-            "--method", "POST",
-            "--input", "-",
-        ], input_text=json.dumps(payload))
-        parsed = json.loads(out)
-        return str(parsed.get("html_url", ""))
-
-    try:
-        return _submit(event)
-    except SystemExit:
-        # GitHub rejects APPROVE on your own PR (and a few other cases). Rather
-        # than lose the whole review, fall back to a plain COMMENT so the
-        # findings still post.
-        if event == "APPROVE":
-            sys.stderr.write("APPROVE rejected by GitHub; falling back to COMMENT.\n")
-            return _submit("COMMENT")
-        raise
-
-
 def cap_nits(findings: list[Finding], cap: int = 5) -> tuple[list[Finding], int]:
     """Keep the top `cap` nits, count the rest."""
     critical = [f for f in findings if f.severity == "critical"]
@@ -620,60 +357,6 @@ def filter_to_diff_lines(
     return in_diff, out_of_diff
 
 
-def post_thread_responses(
-    repo: str,
-    pr_number: int,
-    thread_responses: list[dict[str, Any]],
-    sig: str,
-) -> int:
-    """Post reply comments to prior AI review threads based on model validation."""
-    posted = 0
-    for tr in thread_responses:
-        comment_id = tr.get("comment_id")
-        disposition = tr.get("disposition", "acknowledged")
-        reply_text = tr.get("reply", "")
-        if not comment_id or not reply_text:
-            continue
-
-        marker = "Validated" if disposition == "acknowledged" else "Re-flagged"
-        body = f"{sig}\n\n**{marker}** - {reply_text}"
-
-        try:
-            run([
-                "gh", "api",
-                f"repos/{repo}/pulls/{pr_number}/comments/{comment_id}/replies",
-                "--method", "POST",
-                "-f", f"body={body}",
-            ])
-            posted += 1
-        except SystemExit:
-            sys.stderr.write(f"Failed to post thread response to comment {comment_id}\n")
-    return posted
-
-
-def post_failure_comment(repo: str, pr_number: int, reason: str, model: str) -> None:
-    """Post a PR comment explaining that the automated review could not complete.
-
-    Unlike a review, this stays visible (it warns that no review ran and the PR
-    still needs a human), but carries only the hidden marker - no bot framing.
-    """
-    body = (
-        "**Automated review could not complete.**\n\n"
-        f"Reason: {reason}\n\n"
-        "This PR did not get a review pass and still needs a human review. "
-        "To retry, re-run Vigilant PR against this PR.\n\n"
-        f"{build_signature(model)}"
-    )
-    try:
-        run(
-            ["gh", "pr", "comment", str(pr_number), "--repo", repo, "--body", body],
-            check=True,
-        )
-        sys.stderr.write(f"Posted failure comment to PR #{pr_number}\n")
-    except SystemExit:
-        sys.stderr.write("Failed to post failure comment to PR (gh command failed)\n")
-
-
 def run_threads_only(target: str, config: Config) -> int:
     """Lightweight mode: validate human replies to prior AI comments only."""
     from .hosts import resolve_host
@@ -684,7 +367,7 @@ def run_threads_only(target: str, config: Config) -> int:
         return 1
 
     host = resolve_host(target)
-    pr_number, url_repo = parse_pr_arg(target)
+    pr_number, url_repo = host.parse_target(target)
     repo = config.repo or url_repo or host.detect_repo()
     handle = resolve_handle(config.handle)
     sig = build_signature(config.model, handle)
@@ -758,7 +441,7 @@ def run_review(target: str, config: Config) -> int:
         return 1
 
     host = resolve_host(target)
-    pr_number, url_repo = parse_pr_arg(target)
+    pr_number, url_repo = host.parse_target(target)
     repo = config.repo or url_repo or host.detect_repo()
     handle = resolve_handle(config.handle)
     sig = build_signature(model, handle)

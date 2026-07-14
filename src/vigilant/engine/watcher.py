@@ -19,9 +19,15 @@ from pathlib import Path
 
 from ..ui import print_banner, status
 from .config import Config
+from .hosts import GitHubHost
 from .providers import model_key_missing
-from .review import fetch_last_bot_review_sha, run_review
+from .review import run_review
 from .util import run
+
+# github-watch is a GitHub-specific trigger surface (it discovers PRs via
+# `gh search prs`). Prior-review state is read through the host so the engine's
+# dedup source of truth stays in one place.
+_HOST = GitHubHost()
 
 
 def _watch_status(config: Config, reviewed_today: int) -> str:
@@ -134,7 +140,7 @@ def already_reviewed(
     the local seen-cache is a secondary belt-and-suspenders guard so a poll that
     races the GitHub API does not double-review.
     """
-    last = fetch_last_bot_review_sha(repo, pr_number)
+    last = _HOST.last_review_sha(repo, pr_number)
     if last and last == head_sha:
         return True
     return _seen_key(repo, pr_number, head_sha) in _load_seen(seen_path)

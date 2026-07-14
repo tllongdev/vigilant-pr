@@ -24,7 +24,6 @@ from vigilant.engine.review import (
     decide_event,
     filter_to_diff_lines,
     parse_diff_lines,
-    parse_pr_arg,
     parse_review_json,
 )
 
@@ -134,22 +133,6 @@ def test_cap_nits_keeps_criticals_and_caps_nits() -> None:
 def test_norm_title_collapses_whitespace_and_case() -> None:
     assert _norm_title("  Token   refresh RACES.  ") == "token refresh races"
     assert _norm_title("Same Title") == _norm_title("same   title.")
-
-
-@pytest.mark.parametrize(
-    "arg,expected",
-    [
-        ("123", (123, None)),
-        ("https://github.com/Org/Repo/pull/42", (42, "Org/Repo")),
-    ],
-)
-def test_parse_pr_arg_valid(arg: str, expected: tuple[int, str | None]) -> None:
-    assert parse_pr_arg(arg) == expected
-
-
-def test_parse_pr_arg_invalid_exits() -> None:
-    with pytest.raises(SystemExit):
-        parse_pr_arg("not-a-pr")
 
 
 def test_parse_review_json_plain() -> None:

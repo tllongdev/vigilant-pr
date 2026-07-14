@@ -53,11 +53,13 @@ changes to the engine.
 - **Dispatch is by target.** A PR URL selects the host by its domain / URL shape;
   a bare PR number (or no argument) uses the default host (GitHub) against the
   current repo. This matches how users already invoke the tool.
-- **Phase 1 is a seam, not a rewrite.** The GitHub implementation may delegate to
-  the existing, tested `review.py` `gh` helper functions. The value delivered now
-  is the interface + normalized `PullRequest` + host-routed engine. Physically
-  relocating each `gh` helper body into the GitHub host is mechanical cleanup that
-  can follow without touching the contract.
+- **All GitHub `gh` I/O lives in `GitHubHost`.** The review engine (`review.py`)
+  contains no `gh` invocation and no GitHub-shaped key access; it holds only
+  host-agnostic logic (prompt building, JSON parsing, dedup/ratchet, diff-line
+  validation, comment formatting, the APPROVE/COMMENT decision) and orchestration
+  that talks to the interface. `github-watch` is a GitHub-specific trigger
+  surface and keeps its own discovery calls (see below), but reads prior-review
+  state through the host.
 
 ### Approaches ruled out (do not re-evaluate)
 - A raw provider dict as the PR contract: rejected - it leaks GitHub field names
@@ -87,6 +89,8 @@ Every host constructs this from its own API payload.
 
 ### 2.2 The `HostProvider` interface
 A single object exposing the operations the engine needs. Read side:
+- `parse_target(arg) -> (number, repo_or_None)` - parse a PR URL or bare number
+  for this host (the github.com URL shape is GitHub's business, not the engine's).
 - `detect_repo()` - infer `owner/repo` (or host equivalent) for the current dir.
 - `fetch_pr(repo, number) -> PullRequest` - metadata + full diff, normalized.
 - `read_guidance(repo, head_sha) -> str` - AGENTS.md / CLAUDE.md / REVIEW.md at
@@ -139,13 +143,14 @@ invocation and no GitHub-shaped key access remains in either function.
    `headRefOid`, `is_draft` from `isDraft`, `changed_files` from `changedFiles`).
 5. The existing engine and watcher tests still pass unchanged (behavior parity).
 
-### 2.6 Parallelizable / follow-up work
+### 2.6 Follow-up work
 - Phase 2: a `GitLabHost` implementation (via `glab` or the REST API) validated
   against a real merge request; register it and flip `detect_host` for GitLab
   from "unsupported" to that class. No engine change required.
-- Cleanup: relocate each `gh` helper body from `review.py` into `GitHubHost`
-  (the interface and call sites do not change).
 - A future `gitlab-watch` review-request daemon, parallel to `github-watch`.
+- Optional: promote `github-watch`'s discovery calls (`gh search prs`, head-SHA
+  lookup) into the interface if/when a second watcher is built, so both watchers
+  share one dispatch. Deferred until there is a second host to justify it.
 
 ## Out of scope
 - Any change to finding detection, severity, the system prompt, or the
