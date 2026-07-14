@@ -36,6 +36,13 @@ def test_resolve_provider_alias() -> None:
     assert providers.resolve_provider("openai-compatible/foo")[0] == "openai_compatible"
 
 
+def test_resolve_grok_alias_maps_to_xai() -> None:
+    # "grok" (xAI's model) is an alias for the xai provider; distinct from "groq".
+    assert providers.resolve_provider("grok/grok-4.5") == ("xai", "grok-4.5")
+    assert providers.resolve_provider("xai/grok-4.5") == ("xai", "grok-4.5")
+    assert providers.PROVIDERS["xai"]["key_env"] == "XAI_API_KEY"
+
+
 def test_resolve_provider_mock() -> None:
     assert providers.resolve_provider("mock") == ("mock", "mock")
 

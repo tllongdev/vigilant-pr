@@ -4,8 +4,8 @@ Vigilant PR runs against any model reachable over one of two wire protocols:
 
   - the Anthropic Messages API (Claude), and
   - the OpenAI-compatible /chat/completions API - which Groq, Google Gemini
-    (via its OpenAI-compat endpoint), NVIDIA NIM, OpenAI, OpenRouter, Ollama,
-    vLLM, LM Studio and TGI all speak.
+    (via its OpenAI-compat endpoint), NVIDIA NIM, OpenAI, OpenRouter, xAI (Grok),
+    Ollama, vLLM, LM Studio and TGI all speak.
 
 A model is selected with a `provider/model` string (e.g. `groq/llama-3.3-70b-versatile`,
 `anthropic/claude-sonnet-5`, `ollama/qwen2.5:14b`). A bare string with no
@@ -51,6 +51,9 @@ PROVIDERS: dict[str, dict[str, Any]] = {
                    "base": "https://integrate.api.nvidia.com/v1", "json_mode": False},
     "openrouter": {"style": "openai", "key_env": "OPENROUTER_API_KEY",
                    "base": "https://openrouter.ai/api/v1", "json_mode": False},
+    # xAI (Grok). OpenAI-compatible endpoint; not to be confused with Groq above.
+    "xai": {"style": "openai", "key_env": "XAI_API_KEY",
+            "base": "https://api.x.ai/v1", "json_mode": True},
     "ollama": {"style": "openai", "key_env": None,
                "base": "http://localhost:11434/v1", "json_mode": False},
     # Generic OpenAI-compatible server (vLLM, LM Studio, TGI, ...). Requires
@@ -67,6 +70,7 @@ _PROVIDER_ALIASES = {
     "nim": "nvidia_nim",
     "google": "gemini",
     "claude": "anthropic",
+    "grok": "xai",
 }
 
 
@@ -78,9 +82,10 @@ RECOMMENDED_MODELS = {
     "gemini": "gemini/gemini-2.5-flash",
     "nvidia_nim": "nvidia_nim/deepseek-ai/deepseek-v3.2-exp",
     "openrouter": "openrouter/meta-llama/llama-3.3-70b-instruct",
+    "xai": "xai/grok-4.5",
 }
 # Preference order when auto-selecting a model from whatever key is present.
-_AUTO_ORDER = ("anthropic", "openai", "groq", "gemini", "nvidia_nim", "openrouter")
+_AUTO_ORDER = ("anthropic", "openai", "xai", "groq", "gemini", "nvidia_nim", "openrouter")
 
 
 def model_key_missing(config: Config) -> str | None:
