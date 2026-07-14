@@ -25,6 +25,21 @@ from typing import Any
 
 from .engine.providers import PROVIDERS, resolve_provider
 
+# The `gateway` provider needs more than one key (base URL + either a static
+# token or an OAuth2 client-credentials triple). Its stored entry keeps these
+# fields, which apply_store_to_env() pushes into the matching env vars so the
+# gateway provider picks them up exactly like a manually-exported config.
+GATEWAY_ENV_FIELDS: dict[str, str] = {
+    "api_base": "VIGILANT_API_BASE",
+    "api_key": "VIGILANT_API_KEY",
+    "oauth_token_url": "VIGILANT_OAUTH_TOKEN_URL",
+    "oauth_client_id": "VIGILANT_OAUTH_CLIENT_ID",
+    "oauth_client_secret": "VIGILANT_OAUTH_CLIENT_SECRET",
+    "oauth_scope": "VIGILANT_OAUTH_SCOPE",
+    "oauth_audience": "VIGILANT_OAUTH_AUDIENCE",
+    "oauth_auth_style": "VIGILANT_OAUTH_AUTH_STYLE",
+}
+
 
 def config_dir() -> Path:
     """Directory holding Vigilant PR's managed config.
@@ -97,6 +112,28 @@ def set_provider_key(
     save_store(store)
 
 
+def set_gateway_config(
+    model: str, fields: dict[str, str], make_active: bool = True
+) -> None:
+    """Store the `gateway` provider config (base URL + auth) and its model.
+
+    `fields` is keyed by GATEWAY_ENV_FIELDS names (api_base, api_key, oauth_*).
+    Only non-empty values are kept; secrets live in the same 0600 store as other
+    provider keys. Passing `model` empty is a caller error and is stored as-is.
+    """
+    store = load_store()
+    providers = store.setdefault("providers", {})
+    entry: dict[str, Any] = {"model": model}
+    for field_name in GATEWAY_ENV_FIELDS:
+        value = fields.get(field_name)
+        if value:
+            entry[field_name] = value
+    providers["gateway"] = entry
+    if make_active and model:
+        store["active_model"] = model
+    save_store(store)
+
+
 def remove_provider(provider: str) -> bool:
     """Delete a stored provider key. Returns True if something was removed.
 
@@ -150,6 +187,12 @@ def apply_store_to_env() -> None:
         api_key = info.get("api_key")
         if key_env and api_key and key_env not in os.environ:
             os.environ[key_env] = api_key
+    gateway = store.get("providers", {}).get("gateway")
+    if isinstance(gateway, dict):
+        for field_name, env_var in GATEWAY_ENV_FIELDS.items():
+            value = gateway.get(field_name)
+            if value and env_var not in os.environ:
+                os.environ[env_var] = value
     active = store.get("active_model")
     if active and "VIGILANT_MODEL" not in os.environ:
         os.environ["VIGILANT_MODEL"] = active

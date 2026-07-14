@@ -175,9 +175,18 @@ providers, local servers, and gateways work out of the box.
 
 If your org fronts models through an internal, OpenAI-compatible gateway (for
 centrally-managed, lower-cost access), point Vigilant at it with the `gateway`
-provider. Set the model and base URL, then pick one auth mode. It's fully
-vendor-neutral - no gateway is named in code, you just supply the endpoint and
-credentials.
+provider. It's fully vendor-neutral - no gateway is named in code, you just
+supply the endpoint and credentials.
+
+The easiest path is the guided wizard, which prompts for the base URL and auth
+mode and saves everything to the managed credential store:
+
+```bash
+vigilant model add gateway
+```
+
+Or configure it manually with environment variables (or a `.env`). Set the model
+and base URL, then pick one auth mode:
 
 ```bash
 export VIGILANT_MODEL=gateway/your-model-name

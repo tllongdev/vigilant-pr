@@ -25,7 +25,7 @@ from .engine import (
     list_models,
     provider_api_key,
 )
-from .store import set_active_model, set_provider_key
+from .store import GATEWAY_ENV_FIELDS, set_active_model, set_gateway_config, set_provider_key
 from .ui import print_banner
 
 
@@ -109,22 +109,27 @@ def _yes(question: str, default: bool = True) -> bool:
     return ans in ("y", "yes")
 
 
-def _choose_provider() -> ProviderChoice | None:
+def _choose_provider() -> ProviderChoice | str | None:
+    """Prompt for a provider. Returns a ProviderChoice, "gateway", or None (Ollama)."""
     print("\nPick a model provider (free options first):\n")
     for i, pc in enumerate(PROVIDER_CATALOG, start=1):
         have = " [key already set]" if provider_api_key(pc.key) else ""
         tag = "FREE" if pc.free else "paid"
         print(f"  {i}. {pc.label}  ({tag}){have}")
-    print(f"  {len(PROVIDER_CATALOG) + 1}. Local model via Ollama (no key)")
+    n = len(PROVIDER_CATALOG)
+    print(f"  {n + 1}. Local model via Ollama (no key)")
+    print(f"  {n + 2}. Corporate AI gateway (OpenAI-compatible; static key or OAuth2)")
     choice = _prompt("\nEnter a number", "1")
     try:
         idx = int(choice)
     except ValueError:
         print("Not a number; defaulting to 1.")
         idx = 1
-    if idx == len(PROVIDER_CATALOG) + 1:
+    if idx == n + 1:
         return None  # sentinel: Ollama / local
-    if not 1 <= idx <= len(PROVIDER_CATALOG):
+    if idx == n + 2:
+        return "gateway"
+    if not 1 <= idx <= n:
         idx = 1
     return PROVIDER_CATALOG[idx - 1]
 
@@ -153,23 +158,29 @@ def add_provider_flow(preselected: str | None = None) -> str | None:
     `vigilant model add`. `preselected` may be a catalog provider id or "ollama"
     for the keyless local path.
     """
+    selection: ProviderChoice | str | None
     if preselected in (None, ""):
         if not sys.stdin.isatty():
             sys.stderr.write("Interactive selection needs a terminal; pass a provider name.\n")
             return None
-        pc = _choose_provider()  # None sentinel => local/Ollama
-    elif preselected == "ollama":
-        pc = None
+        selection = _choose_provider()  # None => Ollama, "gateway" => gateway
+    elif preselected in ("ollama", "gateway"):
+        selection = None if preselected == "ollama" else "gateway"
     else:
-        pc = _catalog_lookup(preselected)
-        if pc is None:
+        selection = _catalog_lookup(preselected)
+        if selection is None:
             sys.stderr.write(
                 f"Unknown provider '{preselected}'. Choose one of: "
                 + ", ".join(p.key for p in PROVIDER_CATALOG)
-                + ", ollama.\n"
+                + ", ollama, gateway.\n"
             )
             return None
 
+    if selection == "gateway":
+        return add_gateway_flow()
+    assert not isinstance(selection, str)  # only "gateway" is a str sentinel
+
+    pc = selection  # ProviderChoice | None (Ollama)
     if pc is None:  # local Ollama - no key
         default_local = "ollama/qwen2.5:14b"
         model = _prompt("Ollama model", default_local) if sys.stdin.isatty() else default_local
@@ -196,6 +207,73 @@ def add_provider_flow(preselected: str | None = None) -> str | None:
     set_provider_key(pc.key, key, model=pc.model, make_active=True)
     print(f"Stored {pc.key} and set active model to {pc.model}.")
     return pc.model
+
+
+def add_gateway_flow() -> str | None:
+    """Configure the `gateway` provider (OpenAI-compatible endpoint + auth) and store it.
+
+    Prompts for the model name, base URL, and one auth mode (static bearer or
+    OAuth2 client-credentials). Writes to the managed credential store and makes
+    `gateway/<model>` the active model. Returns the active model, or None if the
+    user bailed / config was incomplete. Interactive-only.
+    """
+    if not sys.stdin.isatty():
+        sys.stderr.write(
+            "Configuring the gateway is interactive. Instead set VIGILANT_MODEL=gateway/<model>, "
+            "VIGILANT_API_BASE, and the auth env vars (VIGILANT_API_KEY or VIGILANT_OAUTH_*) "
+            "yourself - see README.\n"
+        )
+        return None
+
+    print("\nCorporate AI gateway - any OpenAI-compatible endpoint behind your org's proxy.")
+    model_name = _prompt("Model name as the gateway exposes it (e.g. deepseek-v4-pro)")
+    if not model_name:
+        print("No model name; nothing stored.")
+        return None
+    base = _prompt("Gateway base URL (the part before /chat/completions, e.g. https://gw.example.com/v1)")
+    if not base:
+        print("No base URL; nothing stored.")
+        return None
+
+    fields: dict[str, str] = {"api_base": base}
+    print("\nAuth mode:")
+    print("  1. Static bearer token")
+    print("  2. OAuth2 client-credentials (Vigilant fetches, caches, and refreshes tokens)")
+    if _prompt("Enter a number", "1").strip() == "2":
+        token_url = _prompt("OAuth token URL")
+        client_id = _prompt("OAuth client id")
+        client_secret = getpass.getpass("OAuth client secret (input hidden): ").strip()
+        if not (token_url and client_id and client_secret):
+            print("Incomplete OAuth config; nothing stored.")
+            return None
+        fields["oauth_token_url"] = token_url
+        fields["oauth_client_id"] = client_id
+        fields["oauth_client_secret"] = client_secret
+        scope = _prompt("OAuth scope (optional, blank to skip)")
+        if scope:
+            fields["oauth_scope"] = scope
+        audience = _prompt("OAuth audience (optional, blank to skip)")
+        if audience:
+            fields["oauth_audience"] = audience
+        if _yes("Send the client id/secret as an HTTP Basic header (instead of the form body)?",
+                default=False):
+            fields["oauth_auth_style"] = "basic"
+    else:
+        token = getpass.getpass("Bearer token (input hidden): ").strip()
+        if not token:
+            print("No token; nothing stored.")
+            return None
+        fields["api_key"] = token
+
+    model = f"gateway/{model_name}"
+    for field_name, value in fields.items():
+        os.environ[GATEWAY_ENV_FIELDS[field_name]] = value  # let verification reach the gateway now
+    print("Verifying the gateway...")
+    print("  Gateway reachable." if _verify_key("gateway")
+          else "  Could not auto-verify (saving anyway).")
+    set_gateway_config(model, fields, make_active=True)
+    print(f"Stored gateway config and set active model to {model}.")
+    return model
 
 
 def run_init(env_path: str = ".env") -> int:

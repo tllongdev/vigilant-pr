@@ -54,6 +54,76 @@ def test_apply_store_to_env_does_not_override_real_env(monkeypatch):
     assert os.environ["VIGILANT_MODEL"] == "anthropic/claude-sonnet-5"
 
 
+def test_set_gateway_config_static_round_trips():
+    store.set_gateway_config(
+        "gateway/deepseek-v4-pro",
+        {"api_base": "https://gw.example.com/v1", "api_key": "static-tok"},
+    )
+    data = store.load_store()
+    entry = data["providers"]["gateway"]
+    assert entry["model"] == "gateway/deepseek-v4-pro"
+    assert entry["api_base"] == "https://gw.example.com/v1"
+    assert entry["api_key"] == "static-tok"
+    assert data["active_model"] == "gateway/deepseek-v4-pro"
+
+
+def test_set_gateway_config_drops_empty_fields():
+    store.set_gateway_config(
+        "gateway/foo",
+        {"api_base": "https://gw/v1", "api_key": "t", "oauth_scope": ""},
+    )
+    entry = store.load_store()["providers"]["gateway"]
+    assert "oauth_scope" not in entry
+
+
+def test_apply_store_to_env_fills_gateway_static(monkeypatch):
+    for var in store.GATEWAY_ENV_FIELDS.values():
+        monkeypatch.delenv(var, raising=False)
+    store.set_gateway_config(
+        "gateway/foo",
+        {"api_base": "https://gw.example.com/v1", "api_key": "static-tok"},
+    )
+    store.apply_store_to_env()
+    assert os.environ["VIGILANT_API_BASE"] == "https://gw.example.com/v1"
+    assert os.environ["VIGILANT_API_KEY"] == "static-tok"
+    assert os.environ["VIGILANT_MODEL"] == "gateway/foo"
+
+
+def test_apply_store_to_env_fills_gateway_oauth(monkeypatch):
+    for var in store.GATEWAY_ENV_FIELDS.values():
+        monkeypatch.delenv(var, raising=False)
+    store.set_gateway_config(
+        "gateway/foo",
+        {
+            "api_base": "https://gw.example.com/v1",
+            "oauth_token_url": "https://auth.example.com/token",
+            "oauth_client_id": "cid",
+            "oauth_client_secret": "secret",
+            "oauth_scope": "models:read",
+            "oauth_auth_style": "basic",
+        },
+    )
+    store.apply_store_to_env()
+    assert os.environ["VIGILANT_OAUTH_TOKEN_URL"] == "https://auth.example.com/token"
+    assert os.environ["VIGILANT_OAUTH_CLIENT_ID"] == "cid"
+    assert os.environ["VIGILANT_OAUTH_CLIENT_SECRET"] == "secret"
+    assert os.environ["VIGILANT_OAUTH_SCOPE"] == "models:read"
+    assert os.environ["VIGILANT_OAUTH_AUTH_STYLE"] == "basic"
+
+
+def test_apply_store_to_env_gateway_does_not_override_real_env(monkeypatch):
+    for var in store.GATEWAY_ENV_FIELDS.values():
+        monkeypatch.delenv(var, raising=False)
+    store.set_gateway_config(
+        "gateway/foo", {"api_base": "https://stored/v1", "api_key": "stored-tok"}
+    )
+    monkeypatch.setenv("VIGILANT_API_BASE", "https://real/v1")
+    store.apply_store_to_env()
+    assert os.environ["VIGILANT_API_BASE"] == "https://real/v1"
+    # A field not set in the real env is still filled from the store.
+    assert os.environ["VIGILANT_API_KEY"] == "stored-tok"
+
+
 def test_remove_provider_repoints_active():
     store.set_provider_key("groq", "gsk_1", model="groq/llama-3.3-70b-versatile")
     store.set_provider_key("anthropic", "sk-ant-1", model="anthropic/claude-sonnet-5")
