@@ -404,20 +404,23 @@ anything blocks (or a prior concern is re-flagged as unresolved). It never uses
 `REQUEST_CHANGES`, so it surfaces problems without hard-blocking the PR. The
 goal is to move PRs forward unless something genuinely blocks merge.
 
-## Branding
+## Data flow & privacy
 
-Brand assets live in [`assets/`](assets):
+Vigilant PR runs entirely on your machine or CI. It has no server, no account,
+and no telemetry - it never sends your data to us or to any third party you
+didn't configure. Here is exactly what leaves your machine, and when:
 
-| Asset | Use |
-|---|---|
-| `vigilant-pr-mark.svg` / `.png` | Icon only - GitHub/app avatar, favicon |
-| `vigilant-pr-logo.svg` | Horizontal lockup for light backgrounds |
-| `vigilant-pr-logo-dark.svg` | Horizontal lockup for dark backgrounds |
-| `vigilant-pr-social.svg` / `.png` | 1200x630 social / OpenGraph banner for link previews |
-| `favicon.ico` | Multi-resolution (16-256px) favicon; also in `docs/site/` |
+| Data | Goes to | When | Notes |
+|---|---|---|---|
+| PR diff, changed-file context, and your repo's guidance files (`AGENTS.md`/`CLAUDE.md`) | The model provider you choose | Every review | A cloud model (Anthropic, OpenAI, Groq, Gemini, NVIDIA, OpenRouter, xAI) receives this over the internet under that provider's API data policy. A local model (Ollama) or your own self-hosted/gateway endpoint keeps it on your machine/network. |
+| PR metadata and your review comments | GitHub, via the `gh` CLI | Every review | GitHub already hosts your code; the review is posted as you. |
+| Channel messages / @-mentions | Slack or Teams | Only if you run `slack-watch` / `teams-watch` | Uses a token you already have. |
+| API keys and tokens | Stored locally in a `0600` file | Setup | Transmitted only as auth headers to the services above - never anywhere else. |
 
-The mark is a watchful eye whose iris is a scanner aperture. Palette: `#4da3ff`
-(blue) to `#a98bff` (violet) on `#0b0f1a` ink.
+**Maximum privacy:** pick a local model (`ollama/...`) or your own
+OpenAI-compatible gateway. Then your code is never sent to a third party -
+inference runs on your own hardware and the only external call is to GitHub,
+which already has your code.
 
 ## License & trademarks
 
