@@ -1,5 +1,3 @@
-# Copyright 2026 Timothy Long / Longitudinal Intelligence Technologies (LIT)
-# SPDX-License-Identifier: Apache-2.0
 """Vigilant PR review engine.
 
 Public entry points both the CLI and the watcher call, so there is a single

@@ -422,9 +422,9 @@ The mark is a watchful eye whose iris is a scanner aperture. Palette: `#4da3ff`
 ## License & trademarks
 
 Vigilant PR is licensed under the Apache License 2.0 - see [LICENSE](LICENSE)
-and [NOTICE](NOTICE). Copyright (c) 2026 Timothy Long / Longitudinal Intelligence Technologies (LIT).
+and [NOTICE](NOTICE). Copyright (c) 2026 Timothy Long / LongIntel.
 
-"Vigilant PR" and the Vigilant PR logo are trademarks of Longitudinal Intelligence Technologies (LIT). The license
+"Vigilant PR" and the Vigilant PR logo are trademarks of LongIntel. The license
 covers the source code; it does not grant rights to the name or logo. You're
 welcome to build on the code under Apache-2.0, but forks and derivatives must
 use their own name and branding.

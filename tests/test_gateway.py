@@ -1,4 +1,4 @@
-# Copyright 2026 Timothy Long / Longitudinal Intelligence Technologies (LIT)
+# Copyright 2026 Timothy Long / LongIntel
 # SPDX-License-Identifier: Apache-2.0
 """Unit tests for the `gateway` provider and its OAuth2 client-credentials auth.
 

@@ -1,5 +1,3 @@
-# Copyright 2026 Timothy Long / Longitudinal Intelligence Technologies (LIT)
-# SPDX-License-Identifier: Apache-2.0
 """Identity and signature handling for Vigilant PR.
 
 Comments are authored by the running user's GitHub token, so they read as the
