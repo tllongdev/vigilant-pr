@@ -156,6 +156,32 @@ def test_parse_review_json_unparseable_raises() -> None:
         parse_review_json("no json here at all")
 
 
+def test_parse_review_json_trailing_comma_in_object() -> None:
+    raw = '{"summary": "ok", "tally": {"critical": 0, "nit": 1},}'
+    assert parse_review_json(raw) == {"summary": "ok", "tally": {"critical": 0, "nit": 1}}
+
+
+def test_parse_review_json_trailing_comma_before_object_close() -> None:
+    # The exact shape that broke on a live PR: a trailing comma after the last
+    # value inside a nested object, then the closing brace on the next line.
+    raw = '{\n  "findings": [\n    {\n      "severity": "medium",\n      "body": "x",\n    }\n  ]\n}'
+    assert parse_review_json(raw) == {"findings": [{"severity": "medium", "body": "x"}]}
+
+
+def test_parse_review_json_trailing_comma_embedded_in_prose() -> None:
+    raw = 'Here is the review:\n{"summary": "ok", "findings": [],}\nDone.'
+    assert parse_review_json(raw) == {"summary": "ok", "findings": []}
+
+
+def test_strip_trailing_commas_preserves_commas_inside_strings() -> None:
+    from vigilant.engine.review import strip_trailing_commas
+
+    # A comma-then-brace sequence *inside* a string value must survive.
+    src = '{"body": "call foo(a,) and update both places,}"}'
+    assert strip_trailing_commas(src) == src
+    assert parse_review_json(src) == {"body": "call foo(a,) and update both places,}"}
+
+
 def test_build_signature_is_hidden_html_comment_with_handle_and_model() -> None:
     sig = build_signature(SONNET_MODEL, handle="octocat")
     assert sig.startswith(SIG_MARKER)

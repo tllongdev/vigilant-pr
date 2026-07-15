@@ -246,24 +246,58 @@ def parse_diff_lines(diff_text: str) -> dict[str, set[int]]:
     return valid
 
 
+def strip_trailing_commas(s: str) -> str:
+    """Remove trailing commas before } or ] - a common LLM JSON quirk that stdlib
+    json rejects. String-aware, so commas inside string values are left untouched."""
+    out: list[str] = []
+    in_str = False
+    esc = False
+    n = len(s)
+    for i, ch in enumerate(s):
+        if in_str:
+            out.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            out.append(ch)
+            continue
+        if ch == ",":
+            j = i + 1
+            while j < n and s[j] in " \t\r\n":
+                j += 1
+            if j < n and s[j] in "}]":
+                continue
+        out.append(ch)
+    return "".join(out)
+
+
 def parse_review_json(text: str) -> dict[str, Any]:
-    """Extract the JSON object from the model's response, tolerant of stray prose."""
-    try:
-        parsed: dict[str, Any] = json.loads(text)
-        return parsed
-    except json.JSONDecodeError:
-        pass
+    """Extract the JSON object from the model's response, tolerant of stray prose,
+    code fences, and trailing commas."""
+    candidates: list[str] = [text.strip()]
     m = re.search(r"\{.*\}", text, re.DOTALL)
-    if not m:
+    if m:
+        candidates.append(m.group(0))
+    last_err: json.JSONDecodeError | None = None
+    for cand in candidates:
+        for variant in (cand, strip_trailing_commas(cand)):
+            try:
+                parsed: dict[str, Any] = json.loads(variant)
+                return parsed
+            except json.JSONDecodeError as e:
+                last_err = e
+    if last_err is None:
         sys.stderr.write("Model did not return parseable JSON. Raw output:\n")
         sys.stderr.write(text)
         raise ReviewFailedError("Model response was not parseable JSON")
-    try:
-        parsed = json.loads(m.group(0))
-        return parsed
-    except json.JSONDecodeError as e:
-        sys.stderr.write(f"JSON parse failed: {e}\nRaw output:\n{text}\n")
-        raise ReviewFailedError(f"Model response JSON parse failed: {e}") from e
+    sys.stderr.write(f"JSON parse failed: {last_err}\nRaw output:\n{text}\n")
+    raise ReviewFailedError(f"Model response JSON parse failed: {last_err}") from last_err
 
 
 def format_inline_comment(f: Finding, sig: str) -> str:
