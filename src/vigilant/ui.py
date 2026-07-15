@@ -34,7 +34,7 @@ __     _____ ____ ___ _        _    _   _ _____   ____  ____
    \_/  |___\____|___|_____/_/   \_\_| \_| |_|   |_|   |_| \_\
 """
 
-_TAGLINE = "adversarial PR review, posted as you"
+_TAGLINE = "adversarial AI code review, posted as you"
 
 _SPINNER_FRAMES = ("-", "\\", "|", "/")
 
