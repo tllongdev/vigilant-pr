@@ -36,7 +36,7 @@ def test_use_color_on_for_tty(monkeypatch):
 def test_banner_plain_off_tty():
     text = ui.banner(io.StringIO())
     assert "\033[" not in text  # no ANSI escapes
-    assert "adversarial PR review" in text
+    assert "adversarial AI code review" in text
 
 
 def test_banner_colored_on_tty(monkeypatch):
