@@ -95,6 +95,28 @@ uv tool install .
 `main` is the stable release line, so the unpinned command always gets the
 latest release.
 
+## Upgrade
+
+Check what you have, then upgrade in place - your stored config and API keys
+live in `~/.config/vigilant-pr/` and are never touched by an upgrade:
+
+```bash
+vigilant --version
+
+# pipx: force a reinstall from the latest main (most reliable)
+pipx install --force git+https://github.com/tllongdev/vigilant-pr
+# uv:
+uv tool install --force git+https://github.com/tllongdev/vigilant-pr
+# container:
+docker pull ghcr.io/tllongdev/vigilant-pr:latest
+```
+
+Use `--force`. `pipx upgrade` / `uv tool upgrade` compare version strings, so a
+plain upgrade can report "already up to date" and skip a newer `main` commit
+that didn't bump the version - and a pinned `@vX.Y.Z` install won't move at all.
+A forced reinstall always pulls the current code. To pin instead, reinstall with
+an explicit tag: `pipx install --force git+https://github.com/tllongdev/vigilant-pr@v1.5.2`.
+
 ## Fastest start (GitHub)
 
 From zero to auto-reviewing PRs as you, in three commands:
