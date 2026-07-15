@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / Longitudinal Intelligence Technologies (LIT)
+# SPDX-License-Identifier: Apache-2.0
 """Terminal presentation for Vigilant PR (stdlib only).
 
 Two pieces:

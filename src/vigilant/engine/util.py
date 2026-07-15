@@ -1,3 +1,5 @@
+# Copyright 2026 Timothy Long / Longitudinal Intelligence Technologies (LIT)
+# SPDX-License-Identifier: Apache-2.0
 """Subprocess helpers shared across the engine.
 
 Kept dependency-free (stdlib only). The `run` helper wraps `gh`/other CLI calls
