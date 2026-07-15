@@ -135,3 +135,60 @@ def test_add_provider_flow_routes_to_gateway(monkeypatch):
     # preselected "gateway" must dispatch to the gateway flow (off-TTY -> None).
     monkeypatch.setattr(onboarding.sys.stdin, "isatty", lambda: False)
     assert onboarding.add_provider_flow("gateway") is None
+
+
+def test_detected_providers_scoped_to_known_vars(monkeypatch):
+    # Only known provider env vars count - unrelated secrets are never surfaced.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "should-be-ignored")
+    monkeypatch.setenv("GITHUB_TOKEN", "should-be-ignored")
+    detected = onboarding._detected_providers()
+    ids = {pc.key for pc in detected}
+    assert ids == {"anthropic"}
+
+
+def test_offer_detected_selects_and_falls_through(monkeypatch):
+    anthropic = onboarding._catalog_lookup("anthropic")
+    assert anthropic is not None
+
+    _feed_prompts(monkeypatch, ["1"])
+    assert onboarding._offer_detected([anthropic]) is anthropic
+
+    # The "show all providers" option (index len+1) falls through to the full menu.
+    _feed_prompts(monkeypatch, ["2"])
+    assert onboarding._offer_detected([anthropic]) is None
+
+
+def test_add_provider_flow_fastpath_uses_detected_env_key(monkeypatch):
+    # Interactive, key already in env: the fast-path offers it and picking it
+    # stores the key + activates the model without any paste prompt.
+    monkeypatch.setattr(onboarding.sys.stdin, "isatty", lambda: True)
+    _sandbox_env(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env-key")
+    monkeypatch.setattr(onboarding, "_verify_key", lambda provider: True)
+    _feed_prompts(monkeypatch, ["1"])  # pick the first detected provider
+
+    model = onboarding.add_provider_flow()
+    assert model == "anthropic/claude-sonnet-5"
+    assert store.load_store()["providers"]["anthropic"]["api_key"] == "sk-ant-env-key"
+    assert store.get_active_model() == "anthropic/claude-sonnet-5"
+
+
+def test_finalize_provider_exports_env_var_name_for_verification(monkeypatch):
+    # Regression: _finalize_provider must export the env VAR (GROQ_API_KEY), not
+    # the provider id, so the verify step can actually see a freshly-provided key.
+    _sandbox_env(monkeypatch)
+    seen: dict[str, str | None] = {}
+
+    def fake_verify(provider: str) -> bool:
+        seen["key"] = onboarding.provider_api_key(provider)
+        return True
+
+    monkeypatch.setattr(onboarding, "_verify_key", fake_verify)
+    groq = onboarding._catalog_lookup("groq")
+    assert groq is not None
+
+    model = onboarding._finalize_provider(groq, "gsk_fresh_paste")
+    assert model == "groq/llama-3.3-70b-versatile"
+    assert onboarding.os.environ["GROQ_API_KEY"] == "gsk_fresh_paste"
+    assert seen["key"] == "gsk_fresh_paste"  # verification saw the key via its env var
