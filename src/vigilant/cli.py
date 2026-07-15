@@ -24,6 +24,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 
 from .engine import (
     DEFAULT_MODEL,
@@ -49,6 +51,15 @@ from .store import (
     remove_provider,
     set_active_model,
 )
+
+
+def _version_string() -> str:
+    """Installed package version, or a clear marker when run from an uninstalled tree."""
+    try:
+        return _pkg_version("vigilant-pr")
+    except PackageNotFoundError:
+        return "0+source"
+
 
 # Commands that touch GitHub and therefore need `gh`/GH_TOKEN available.
 _GITHUB_COMMANDS = {"review", "threads", "github-watch", "slack-watch", "teams-watch"}
@@ -158,6 +169,9 @@ def main(argv: list[str] | None = None) -> int:
             "Vigilant PR - review a pull request and post comments on your behalf. "
             "Defaults to Sonnet 5; pass --opus for Opus 4.8 on hard PRs."
         ),
+    )
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"vigilant-pr {_version_string()}"
     )
     subparsers = parser.add_subparsers(dest="command", required=True, metavar="<command>")
 

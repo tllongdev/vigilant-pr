@@ -150,6 +150,50 @@ def _catalog_lookup(provider_id: str) -> ProviderChoice | None:
     return None
 
 
+def _detected_providers() -> list[ProviderChoice]:
+    """Catalog providers whose API key is already present in the environment.
+
+    Scoped strictly to the known provider env vars - never a broad scan of the
+    environment - so unrelated secrets (AWS, GitHub, DB creds) are never surfaced.
+    """
+    return [pc for pc in PROVIDER_CATALOG if provider_api_key(pc.key)]
+
+
+def _offer_detected(detected: list[ProviderChoice]) -> ProviderChoice | None:
+    """Offer the providers we already have keys for. Never echoes key values.
+
+    Returns the chosen provider, or None to fall through to the full menu.
+    """
+    print("\nFound API keys already in your environment:\n")
+    for i, pc in enumerate(detected, start=1):
+        print(f"  {i}. {pc.label}  ({pc.key_env})")
+    print(f"  {len(detected) + 1}. Show all providers / enter a key manually")
+    choice = _prompt("\nUse one of these?", "1")
+    try:
+        idx = int(choice)
+    except ValueError:
+        return None
+    if 1 <= idx <= len(detected):
+        return detected[idx - 1]
+    return None
+
+
+def _finalize_provider(pc: ProviderChoice, key: str) -> str | None:
+    """Verify (best-effort), store, and activate `pc` with `key`.
+
+    Returns the now-active model string, or None if no key was provided.
+    """
+    if not key:
+        print("No key provided; nothing stored.")
+        return None
+    os.environ[pc.key_env] = key  # so the verification below can see it
+    print("Verifying the key...")
+    print("  Key works." if _verify_key(pc.key) else "  Could not auto-verify (saving anyway).")
+    set_provider_key(pc.key, key, model=pc.model, make_active=True)
+    print(f"Stored {pc.key_env} and set active model to {pc.model}.")
+    return pc.model
+
+
 def add_provider_flow(preselected: str | None = None) -> str | None:
     """Choose a provider, capture its key, store it, and make it the active model.
 
@@ -163,6 +207,12 @@ def add_provider_flow(preselected: str | None = None) -> str | None:
         if not sys.stdin.isatty():
             sys.stderr.write("Interactive selection needs a terminal; pass a provider name.\n")
             return None
+        detected = _detected_providers()
+        if detected:
+            chosen = _offer_detected(detected)
+            if chosen is not None:
+                # Key already in the environment - use it directly, no paste needed.
+                return _finalize_provider(chosen, provider_api_key(chosen.key) or "")
         selection = _choose_provider()  # None => Ollama, "gateway" => gateway
     elif preselected in ("ollama", "gateway"):
         selection = None if preselected == "ollama" else "gateway"
@@ -192,21 +242,13 @@ def add_provider_flow(preselected: str | None = None) -> str | None:
     print(f"\nGet a key here: {pc.url}")
     existing = provider_api_key(pc.key)
     if sys.stdin.isatty():
-        if existing and _yes(f"{pc.key} is already set in your environment - use it?"):
+        if existing and _yes(f"{pc.key_env} is already set in your environment - use it?"):
             key = existing
         else:
-            key = getpass.getpass(f"Paste your {pc.key} (input hidden): ").strip()
+            key = getpass.getpass(f"Paste your {pc.key_env} (input hidden): ").strip()
     else:
         key = existing or ""
-    if not key:
-        print("No key provided; nothing stored.")
-        return None
-    os.environ[pc.key] = key  # so verification below can see it
-    print("Verifying the key...")
-    print("  Key works." if _verify_key(pc.key) else "  Could not auto-verify (saving anyway).")
-    set_provider_key(pc.key, key, model=pc.model, make_active=True)
-    print(f"Stored {pc.key} and set active model to {pc.model}.")
-    return pc.model
+    return _finalize_provider(pc, key or "")
 
 
 def add_gateway_flow() -> str | None:
