@@ -26,6 +26,9 @@ from vigilant.engine.review import (
     _norm_title,
     cap_nits,
     decide_event,
+    dependency_search_dirs,
+    diff_touches_dependencies,
+    downgrade_unverifiable,
     filter_to_diff_lines,
     format_review_body,
     parse_diff_lines,
@@ -68,7 +71,8 @@ def test_user_prompt_injects_current_date_and_guards_against_hallucinated_dates(
     rendered = USER_PROMPT_TEMPLATE.format(
         pr_number=1, repo="o/r", today="2026-07-11", title="t", body="b",
         base="main", head="feat", head_sha="abc", file_count=1,
-        review_scope_note="", guidance="", diff="", prior_threads_section="",
+        review_scope_note="", guidance="", dependency_manifests="", diff="",
+        prior_threads_section="",
     )
     assert "Today's date is 2026-07-11" in rendered
     # explicit guard so the model stops flagging valid dates as future/typos
@@ -298,3 +302,98 @@ def test_approve_before_post_rejects_no(
     monkeypatch.setattr("builtins.input", lambda *a: "n")
     assert _approve_before_post("o/r", 1, "me", "m", "COMMENT", "b", [], "SIG", []) is False
     assert "not posted" in capsys.readouterr().err
+
+
+# --- verifiability guardrail: cap self-admitted-unverifiable findings to nit ---
+
+
+def _f(severity: str, body: str) -> Finding:
+    return Finding(severity=severity, path="a.py", line=3, title="t", body=body)
+
+
+def test_downgrade_unverifiable_caps_critical_that_admits_it_cannot_confirm() -> None:
+    findings = [_f("critical", "This will crash. I could not confirm the sentry-sdk version.")]
+    out, n = downgrade_unverifiable(findings)
+    assert n == 1
+    assert out[0].severity == "nit"
+    assert "capped to nit" in out[0].body.lower()
+
+
+def test_downgrade_unverifiable_caps_medium_not_visible_in_diff() -> None:
+    findings = [_f("medium", "The caller is not visible in the diff, so this may break.")]
+    out, n = downgrade_unverifiable(findings)
+    assert n == 1
+    assert out[0].severity == "nit"
+
+
+def test_downgrade_unverifiable_leaves_verified_critical_alone() -> None:
+    # A concrete, self-contained critical with no hedge must stay critical.
+    findings = [_f("critical", "Off-by-one on line 3 drops the last record. Use <= not <.")]
+    out, n = downgrade_unverifiable(findings)
+    assert n == 0
+    assert out[0].severity == "critical"
+    assert out[0].body == findings[0].body  # unchanged, no note appended
+
+
+def test_downgrade_unverifiable_never_touches_nits() -> None:
+    findings = [_f("nit", "I cannot verify this style choice but it reads oddly.")]
+    out, n = downgrade_unverifiable(findings)
+    assert n == 0
+    assert out[0].severity == "nit"
+
+
+# --- dependency-touch detection: when to fetch manifests ----------------------
+
+
+def test_diff_touches_dependencies_python_import() -> None:
+    diff = "+++ b/app.py\n@@ -1 +1,2 @@\n import os\n+import requests\n"
+    assert diff_touches_dependencies(diff) is True
+
+
+def test_diff_touches_dependencies_manifest_edit() -> None:
+    diff = "+++ b/requirements.txt\n@@ -1 +1,2 @@\n flask\n+sentry-sdk==2.1.0\n"
+    assert diff_touches_dependencies(diff) is True
+
+
+def test_diff_touches_dependencies_go_and_js() -> None:
+    go = '+++ b/main.go\n@@ -1 +1,2 @@\n+import "fmt"\n'
+    js = "+++ b/a.ts\n@@ -1 +1,2 @@\n+import { x } from 'y'\n"
+    req = "+++ b/app.js\n@@ -1 +1,2 @@\n+const z = require('z')\n"
+    assert diff_touches_dependencies(go) is True
+    assert diff_touches_dependencies(js) is True
+    assert diff_touches_dependencies(req) is True
+
+
+def test_diff_touches_dependencies_false_for_plain_code() -> None:
+    # No added import lines and no manifest edit -> no manifest fetch.
+    diff = "+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    return 1\n"
+    assert diff_touches_dependencies(diff) is False
+
+
+def test_diff_touches_dependencies_ignores_removed_import() -> None:
+    # A removed import (context/deletion) is not a reason to fetch manifests.
+    diff = "+++ b/app.py\n@@ -1,2 +1 @@\n-import requests\n def f():\n"
+    assert diff_touches_dependencies(diff) is False
+
+
+def test_dependency_search_dirs_collects_changed_dirs_and_root() -> None:
+    diff = (
+        "+++ b/worker/worker.py\n@@ -1 +1 @@\n+import x\n"
+        "+++ b/services/api/main.go\n@@ -1 +1 @@\n+import y\n"
+    )
+    dirs = dependency_search_dirs(diff)
+    assert dirs == ("worker", "services/api", "")
+
+
+def test_dependency_search_dirs_root_only_for_root_file() -> None:
+    diff = "+++ b/app.py\n@@ -1 +1 @@\n+import x\n"
+    assert dependency_search_dirs(diff) == ("",)
+
+
+def test_dependency_search_dirs_dedups_and_skips_dev_null() -> None:
+    diff = (
+        "+++ b/pkg/a.py\n@@ -1 +1 @@\n+import x\n"
+        "+++ b/pkg/b.py\n@@ -1 +1 @@\n+import y\n"
+        "+++ /dev/null\n"
+    )
+    assert dependency_search_dirs(diff) == ("pkg", "")

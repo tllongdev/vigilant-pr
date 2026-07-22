@@ -78,6 +78,8 @@ Severity (only for issues INTRODUCED by this PR - never flag pre-existing issues
 - "medium": real issue that should be fixed before merge but won't cause immediate production failure (e.g., missing error handling, race conditions under specific conditions, hardcoded values that should be configurable).
 - "nit": style, naming, minor improvement. Cap at 5 inline; mention overflow in summary. Not blocking.
 
+Verifiability (hard rule): you see ONLY the unified diff, the repo guidance files, and any dependency manifests provided below - not the whole repository. A finding must never be 'critical' or 'medium' if it rests on something you cannot see (a dependency's installed version, a call site not in the diff, config or a manifest not provided). Before flagging a dependency or version-support issue, check the provided dependency manifests: if they show the dependency/version is present and supported, do not flag it; if no manifest is provided and you cannot otherwise confirm it from the diff, classify it as 'nit' (or omit it) and record what you could not verify in "skipped". Never assume a dependency is missing, unpinned, or too old just because the diff does not show a version bump.
+
 Prior thread evaluation (only when prior threads are provided):
 - You may receive threads from your own prior review where a human has replied.
 - For each thread, evaluate the human's response against the current diff:
@@ -145,6 +147,9 @@ Files changed: {file_count}
 Repo guidance files (if present, read carefully):
 {guidance}
 
+Dependency manifests (declared dependencies/versions at the PR head - use these to verify any import or version-support claim; do NOT assume a dependency is missing or too old just because the diff shows no bump):
+{dependency_manifests}
+
 Unified diff:
 ```diff
 {diff}
@@ -211,6 +216,102 @@ def _norm_title(title: str) -> str:
     """Normalize a finding title for dedup: collapse whitespace, drop trailing
     period, lowercase."""
     return re.sub(r"\s+", " ", title).strip().rstrip(".").lower()
+
+
+# Phrases where the model itself admits it could not verify a claim. A finding
+# whose body rests on an admitted unknown must not land as a blocking severity -
+# it is capped to a non-blocking nit so it surfaces as "worth verifying" rather
+# than a false alarm. Motivated by a Critical raised on a dependency the diff did
+# not show (the repo actually pinned a supported version).
+_UNVERIFIABLE_MARKERS = re.compile(
+    r"could ?n[o']t (?:confirm|verify|tell|determine|check)"
+    r"|can(?:not|'t|no?t) (?:confirm|verify|tell|determine|be verified|be confirmed)"
+    r"|unable to (?:confirm|verify|determine|tell)"
+    r"|no way to (?:verify|confirm|tell|know)"
+    r"|(?:not|isn't|is not|aren't|are not|wasn't|was not|no visible|not shown|not present|"
+    r"not included|not available) (?:\w+\s+){0,3}(?:in|within) (?:the |this )?"
+    r"(?:diff|pr|changeset|patch|requirements|manifest)"
+    r"|not (?:in|part of) (?:the |this )?diff"
+    r"|outside (?:the|this) (?:diff|pr|patch|changeset)"
+    r"|without (?:seeing|access to|visibility into|the full)",
+    re.IGNORECASE,
+)
+
+# Diff signals that dependency manifests are worth fetching so version/import
+# claims can be checked against real declared versions instead of guessed.
+_ADDED_IMPORT_RE = re.compile(
+    r"^\+\s*(?:import\s|from\s+\S+\s+import\s|const\s+[\w{}, ]+=\s*require\(|"
+    r"require\s|require\(|use\s+\w|#include\s|using\s+\w)"
+)
+_MANIFEST_PATH_RE = re.compile(
+    r"(?:^|/)(?:requirements[^/]*\.txt|pyproject\.toml|setup\.cfg|setup\.py|Pipfile|"
+    r"package\.json|go\.mod|Gemfile|Cargo\.toml|composer\.json|"
+    r"build\.gradle(?:\.kts)?|pom\.xml)$"
+)
+
+
+def downgrade_unverifiable(findings: list[Finding]) -> tuple[list[Finding], int]:
+    """Cap self-admitted unverifiable critical/medium findings to nit.
+
+    The reviewer only sees the diff (plus guidance and any fetched manifests), so
+    a finding whose own reasoning admits it could not verify the claim is not
+    allowed to block a merge. It is downgraded to a non-blocking nit and
+    annotated, turning a confident false alarm into an honest "worth checking"
+    note. Returns the (possibly rewritten) findings and how many were downgraded.
+    """
+    downgraded = 0
+    result: list[Finding] = []
+    for f in findings:
+        if f.severity in ("critical", "medium") and _UNVERIFIABLE_MARKERS.search(f.body):
+            note = (
+                "\n\n_Severity capped to nit by Vigilant PR: this finding's own reasoning "
+                "could not verify the claim from the diff, so it is not treated as blocking. "
+                "Confirm manually if it matters._"
+            )
+            result.append(
+                Finding(
+                    severity="nit",
+                    path=f.path,
+                    line=f.line,
+                    title=f.title,
+                    body=f.body + note,
+                )
+            )
+            downgraded += 1
+        else:
+            result.append(f)
+    return result, downgraded
+
+
+def dependency_search_dirs(diff_text: str) -> tuple[str, ...]:
+    """Directories to search for dependency manifests: the directory of each
+    changed file, plus the repo root. Ordered, de-duplicated. This lets a manifest
+    that lives beside the code (monorepo/service subdir) be found, not just root."""
+    dirs: list[str] = []
+    for raw in diff_text.splitlines():
+        if raw.startswith("+++ b/"):
+            path = raw[len("+++ b/"):].strip()
+            if not path or path == "/dev/null":
+                continue
+            directory = path.rsplit("/", 1)[0] if "/" in path else ""
+            if directory and directory not in dirs:
+                dirs.append(directory)
+    dirs.append("")  # repo root is always searched
+    return tuple(dict.fromkeys(dirs))
+
+
+def diff_touches_dependencies(diff_text: str) -> bool:
+    """Whether the diff adds an import/require/use line or edits a dependency
+    manifest - the signal to fetch manifests so version/import claims are checked
+    against real declared versions instead of guessed."""
+    for raw in diff_text.splitlines():
+        if raw.startswith("+++ b/") or raw.startswith("--- a/"):
+            if _MANIFEST_PATH_RE.search(raw[6:].strip()):
+                return True
+            continue
+        if raw.startswith("+") and not raw.startswith("+++") and _ADDED_IMPORT_RE.match(raw):
+            return True
+    return False
 
 
 def parse_diff_lines(diff_text: str) -> dict[str, set[int]]:
@@ -589,6 +690,20 @@ def run_review(target: str, config: Config) -> int:
             )
             sys.stderr.write(f"Incremental review: diff since {last_reviewed_sha[:7]}\n")
 
+    # When the diff adds imports or edits a manifest, fetch the declared
+    # dependency manifests so the model can verify version/import claims instead
+    # of guessing (guards against false "dependency missing/too old" findings).
+    dependency_manifests = "(none fetched - the diff does not appear to touch dependencies)"
+    if diff_touches_dependencies(pr.diff):
+        sys.stderr.write("Diff touches imports/dependencies; fetching dependency manifests...\n")
+        fetched = host.read_dependency_manifests(repo, head_sha, dependency_search_dirs(pr.diff))
+        if fetched.strip():
+            dependency_manifests = fetched
+        else:
+            dependency_manifests = (
+                "(diff touches dependencies, but no known manifest file was found at the PR head)"
+            )
+
     sys.stderr.write("Fetching prior AI review threads...\n")
     prior_threads = host.fetch_prior_threads(repo, pr_number)
     thread_context = format_thread_context(prior_threads)
@@ -614,6 +729,7 @@ def run_review(target: str, config: Config) -> int:
         file_count=pr.changed_files,
         review_scope_note=review_scope_note,
         guidance=guidance,
+        dependency_manifests=dependency_manifests,
         diff=pr.diff,
         prior_threads_section=prior_threads_section,
     )
@@ -641,6 +757,15 @@ def run_review(target: str, config: Config) -> int:
         for f in review.get("findings", [])
         if f.get("path") and f.get("line")
     ]
+
+    # Verifiability guardrail: a finding whose own reasoning admits it couldn't be
+    # verified from the diff must not block a merge. Cap those to nit.
+    raw_findings, downgraded = downgrade_unverifiable(raw_findings)
+    if downgraded:
+        sys.stderr.write(
+            f"Capped {downgraded} unverifiable finding(s) to nit "
+            "(their own reasoning could not confirm the claim from the diff).\n"
+        )
 
     # Dedup: never repost a finding already raised on this PR (by path+title).
     if prior_sigs:
