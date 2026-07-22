@@ -115,7 +115,7 @@ Use `--force`. `pipx upgrade` / `uv tool upgrade` compare version strings, so a
 plain upgrade can report "already up to date" and skip a newer `main` commit
 that didn't bump the version - and a pinned `@vX.Y.Z` install won't move at all.
 A forced reinstall always pulls the current code. To pin instead, reinstall with
-an explicit tag: `pipx install --force git+https://github.com/tllongdev/vigilant-pr@v1.6.0`.
+an explicit tag: `pipx install --force git+https://github.com/tllongdev/vigilant-pr@v1.7.0`.
 
 ## Fastest start (GitHub)
 
