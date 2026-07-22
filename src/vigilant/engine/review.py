@@ -168,10 +168,12 @@ class Finding:
 
     @property
     def severity_marker(self) -> str:
+        # Plain severity labels (no color-coded emoji) so a posted review reads
+        # like a human wrote it. Callers wrap this in bold where appropriate.
         return {
-            "critical": "\U0001f534 Critical",
-            "medium": "\U0001f7e0 Medium",
-            "nit": "\U0001f7e1 Nit",
+            "critical": "Critical",
+            "medium": "Medium",
+            "nit": "Nit",
         }.get(self.severity, self.severity.title())
 
 
@@ -421,11 +423,11 @@ def format_review_body(
     summary = review.get("summary", "").strip() or "(no summary)"
     skipped = review.get("skipped", []) or []
 
-    # A compact, human-reading list (not a table): each finding is also an inline
-    # comment on its line, so this is just a scannable at-a-glance recap.
+    # A compact, human-reading recap (not a table): each finding is also an inline
+    # comment on its line, so this is just a scannable at-a-glance list.
     if findings:
         findings_list = "\n".join(
-            f"{f.severity_marker} `{f.path}:{f.line}` - {f.title}" for f in findings
+            f"- **{f.severity_marker}** `{f.path}:{f.line}` - {f.title}" for f in findings
         )
     else:
         findings_list = "No new issues found in this diff."
@@ -436,11 +438,11 @@ def format_review_body(
 
     tally_parts = []
     if critical:
-        tally_parts.append(f"\U0001f534 {critical} Critical")
+        tally_parts.append(f"{critical} Critical")
     if medium:
-        tally_parts.append(f"\U0001f7e0 {medium} Medium")
+        tally_parts.append(f"{medium} Medium")
     if nit:
-        tally_parts.append(f"\U0001f7e1 {nit} Nit")
+        tally_parts.append(f"{nit} Nit")
     tally_str = ", ".join(tally_parts) if tally_parts else "No findings"
 
     sha_marker = f"\n\n<!-- ai-review-sha: {head_sha} -->" if head_sha else ""

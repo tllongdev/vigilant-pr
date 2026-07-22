@@ -30,6 +30,7 @@ from vigilant.engine.review import (
     diff_touches_dependencies,
     downgrade_unverifiable,
     filter_to_diff_lines,
+    format_inline_comment,
     format_review_body,
     parse_diff_lines,
     parse_review_json,
@@ -251,6 +252,32 @@ def test_format_review_body_uses_list_not_table() -> None:
 def test_format_review_body_empty_findings_message() -> None:
     body = format_review_body({"summary": "clean", "skipped": []}, [], "SIG")
     assert "No new issues found" in body
+
+
+def test_review_output_has_no_circle_emoji_but_keeps_severity_labels() -> None:
+    # Reviews should read like a human wrote them: no color-coded circle emoji,
+    # but the Critical/Medium/Nit labels stay.
+    review = {"summary": "s", "skipped": []}
+    findings = [
+        Finding("critical", "a.py", 1, "boom", "b"),
+        Finding("medium", "b.py", 2, "risky", "b"),
+        Finding("nit", "c.py", 3, "style", "b"),
+    ]
+    body = format_review_body(review, findings, "SIG")
+    for circle in ("\U0001f534", "\U0001f7e0", "\U0001f7e1"):
+        assert circle not in body
+    assert "**Critical**" in body
+    assert "**Medium**" in body
+    assert "**Nit**" in body
+    # tally line keeps the counts, sans emoji
+    assert "1 Critical, 1 Medium, 1 Nit" in body
+
+
+def test_inline_comment_label_is_plain_bold_severity() -> None:
+    comment = format_inline_comment(Finding("critical", "a.py", 9, "boom", "why"), "SIG")
+    assert comment.startswith("SIG")
+    assert "**Critical** - boom" in comment
+    assert "\U0001f534" not in comment
 
 
 def test_format_review_body_does_not_embed_footnote() -> None:

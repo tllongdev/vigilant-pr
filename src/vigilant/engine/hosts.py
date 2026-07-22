@@ -293,8 +293,10 @@ class GitHubHost:
             body = c.get("body", "")
             severity = "nit"
             title = ""
+            # The leading severity emoji is optional: newer reviews post a plain
+            # "**Critical** - ..." label, older ones carry a color-coded circle.
             sev_match = re.search(
-                r"\*\*(?:\U0001f534|\U0001f7e0|\U0001f7e1)\s*(Critical|Medium|Nit)\*\*\s*-\s*(.+?)(?:\n|$)",
+                r"\*\*(?:[\U0001f534\U0001f7e0\U0001f7e1]\s*)?(Critical|Medium|Nit)\*\*\s*-\s*(.+?)(?:\n|$)",
                 body,
             )
             if sev_match:
