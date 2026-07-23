@@ -15,6 +15,8 @@ no change to the engine. See `docs/plans/host-provider_spec.md`.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import re
 import sys
@@ -72,6 +74,9 @@ class HostProvider(Protocol):
     def detect_repo(self) -> str: ...
     def fetch_pr(self, repo: str, number: int) -> PullRequest: ...
     def read_guidance(self, repo: str, head_sha: str) -> str: ...
+    def read_dependency_manifests(
+        self, repo: str, head_sha: str, search_dirs: tuple[str, ...] = ("",)
+    ) -> str: ...
     def fetch_prior_threads(self, repo: str, number: int) -> list[PriorThread]: ...
     def last_review_sha(self, repo: str, number: int) -> str | None: ...
     def prior_finding_signatures(self, repo: str, number: int) -> set[tuple[str, str]]: ...
@@ -138,17 +143,109 @@ class GitHubHost:
             diff=diff,
         )
 
+    @staticmethod
+    def _read_repo_file(repo: str, path: str, ref: str) -> str | None:
+        """Return the decoded text of a repo file at `ref`, or None if it doesn't
+        exist or isn't a plain file.
+
+        Uses the JSON contents API (not `Accept: raw` + `-q .`): the raw+jq combo
+        silently returns nothing because jq can't parse non-JSON file bytes, and
+        it can't distinguish a 404 body from a real JSON file like package.json.
+        The JSON envelope makes both cases unambiguous.
+        """
+        out = run(
+            ["gh", "api", f"repos/{repo}/contents/{path}?ref={ref}"],
+            check=False,
+        )
+        if not out.strip():
+            return None
+        try:
+            data = json.loads(out)
+        except json.JSONDecodeError:
+            return None
+        # A 404 is a dict without a file payload; a directory is a list.
+        if not isinstance(data, dict) or data.get("type") != "file":
+            return None
+        content = data.get("content")
+        if not isinstance(content, str) or data.get("encoding") != "base64":
+            return None
+        try:
+            return base64.b64decode(content).decode("utf-8", errors="replace")
+        except (ValueError, binascii.Error):
+            return None
+
     def read_guidance(self, repo: str, head_sha: str) -> str:
         parts: list[str] = []
         for fname in ("AGENTS.md", "CLAUDE.md", "REVIEW.md"):
-            out = run(
-                ["gh", "api", f"repos/{repo}/contents/{fname}?ref={head_sha}",
-                 "-H", "Accept: application/vnd.github.raw", "-q", "."],
-                check=False,
-            )
-            if out.strip() and not out.strip().startswith("{"):
-                parts.append(f"### {fname}\n\n{out.strip()}")
+            text = self._read_repo_file(repo, fname, head_sha)
+            if text and text.strip():
+                parts.append(f"### {fname}\n\n{text.strip()}")
         return "\n\n".join(parts) if parts else "(no AGENTS.md / CLAUDE.md / REVIEW.md at repo root)"
+
+    # Declaration manifests worth showing the reviewer to verify dependency and
+    # version-support claims. Lockfiles are deliberately excluded: they are large
+    # and the declaration file already carries the version constraint we need.
+    # Ordered by priority so the blind-probe fallback hits the most common
+    # ecosystems first (matters when the fallback probe budget is exhausted).
+    _MANIFEST_FILES = (
+        "requirements.txt", "requirements-dev.txt", "pyproject.toml", "package.json",
+        "go.mod", "Gemfile", "Cargo.toml", "composer.json", "setup.cfg", "setup.py",
+        "Pipfile", "build.gradle", "build.gradle.kts", "pom.xml",
+    )
+    _MANIFEST_MAX_CHARS = 4000
+    _MANIFEST_MAX_FILES = 8   # cap on manifests actually included in the prompt
+    _MANIFEST_MAX_PROBES = 30  # cap on content requests in the tree-unavailable fallback
+
+    def read_dependency_manifests(
+        self, repo: str, head_sha: str, search_dirs: tuple[str, ...] = ("",)
+    ) -> str:
+        """Fetch declared dependency manifests at `head_sha` (empty string if none).
+
+        `search_dirs` are the directories to look in (the changed files' own
+        directories plus the repo root), so a manifest that lives beside the code
+        in a monorepo/service subdir is found, not just one at the root. Only
+        declaration files are pulled (never lockfiles), each truncated so a large
+        manifest can't blow up the prompt. The engine decides when to call this
+        (only when the diff touches imports/deps), so it isn't paid on every PR.
+        """
+        wanted = set(search_dirs) or {""}
+        # One recursive tree call discovers which manifests actually exist, so we
+        # fetch only real files instead of blindly probing every name in every dir.
+        tree_raw = run(
+            ["gh", "api", f"repos/{repo}/git/trees/{head_sha}?recursive=1",
+             "-q", ".tree[].path"],
+            check=False,
+        )
+        existing = [line.strip() for line in tree_raw.splitlines() if line.strip()]
+
+        manifest_set = frozenset(self._MANIFEST_FILES)
+        candidates: list[str] = []
+        if existing:
+            for path in existing:
+                base = path.rsplit("/", 1)[-1]
+                directory = path.rsplit("/", 1)[0] if "/" in path else ""
+                if base in manifest_set and directory in wanted:
+                    candidates.append(path)
+        else:
+            # Tree unavailable (empty/truncated/permission) - fall back to probing
+            # known manifest names (priority order) in the wanted directories.
+            for directory in wanted:
+                prefix = f"{directory}/" if directory else ""
+                candidates.extend(f"{prefix}{name}" for name in self._MANIFEST_FILES)
+            candidates = candidates[: self._MANIFEST_MAX_PROBES]
+
+        parts: list[str] = []
+        for path in candidates:
+            if len(parts) >= self._MANIFEST_MAX_FILES:
+                break
+            text = self._read_repo_file(repo, path, head_sha)
+            if not text or not text.strip():
+                continue
+            text = text.strip()
+            if len(text) > self._MANIFEST_MAX_CHARS:
+                text = text[: self._MANIFEST_MAX_CHARS] + "\n... (truncated)"
+            parts.append(f"### {path}\n\n{text}")
+        return "\n\n".join(parts)
 
     def fetch_prior_threads(self, repo: str, number: int) -> list[PriorThread]:
         raw = run(
@@ -196,8 +293,10 @@ class GitHubHost:
             body = c.get("body", "")
             severity = "nit"
             title = ""
+            # The leading severity emoji is optional: newer reviews post a plain
+            # "**Critical** - ..." label, older ones carry a color-coded circle.
             sev_match = re.search(
-                r"\*\*(?:\U0001f534|\U0001f7e0|\U0001f7e1)\s*(Critical|Medium|Nit)\*\*\s*-\s*(.+?)(?:\n|$)",
+                r"\*\*(?:[\U0001f534\U0001f7e0\U0001f7e1]\s*)?(Critical|Medium|Nit)\*\*\s*-\s*(.+?)(?:\n|$)",
                 body,
             )
             if sev_match:
